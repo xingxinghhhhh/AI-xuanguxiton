@@ -1,0 +1,23 @@
+{
+  "lookup": [{"code": "600000", "orgId": "gssh0600000", "zwjc": "浦发银行"}],
+  "pages": [
+    {
+      "totalRecordNum": 1,
+      "hasMore": false,
+      "announcements": [
+        {
+          "secCode": "600000",
+          "secName": "浦发银行",
+          "orgId": "gssh0600000",
+          "announcementId": "1224905574",
+          "announcementTitle": "关于公司章程修订获核准的公告",
+          "announcementTime": 1767052800000,
+          "adjunctUrl": "finalpage/2025-12-30/1224905574.PDF",
+          "adjunctSize": 102,
+          "adjunctType": "PDF"
+        }
+      ]
+    }
+  ],
+  "content": {"1224905574": {"error": "HTTP 404"}}
+}
