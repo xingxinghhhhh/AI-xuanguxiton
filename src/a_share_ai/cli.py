@@ -41,9 +41,11 @@ from .fundamentals.baostock_profitability import (
 )
 from .market.adapter import JsonlReplaySource, ReplayInputError
 from .market.adapters.baostock_daily import BaostockDailyConfig, BaostockDailySource
+from .market.baostock_market_context import BaostockMarketContextSource
 from .market.calendar import CalendarError, JsonTradingCalendarSource
 from .market.coverage import CoverageReport, audit_daily_coverage
 from .market.health import HealthReport, ValidationIssue, build_health_report
+from .market.market_context import INDEX_SYMBOLS, MARKET_CONTEXT_VERSION, MarketContextConfig
 from .market.replay import canonical_jsonl, sha256_bytes, write_atomic
 
 
@@ -92,6 +94,17 @@ def _build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--end", type=_parse_date, required=True)
     capture.add_argument("--received-at", type=_parse_as_of, required=True)
     capture.add_argument("--output-dir", type=Path, required=True)
+
+    market_context = subparsers.add_parser(
+        "capture-market-context",
+        help="capture fixed benchmark-index context from Baostock",
+    )
+    market_context.add_argument("--start", type=_parse_date, required=True)
+    market_context.add_argument("--end", type=_parse_date, required=True)
+    market_context.add_argument("--as-of", type=_parse_as_of, required=True)
+    market_context.add_argument("--received-at", type=_parse_as_of, required=True)
+    market_context.add_argument("--calendar", type=Path, required=True)
+    market_context.add_argument("--output-dir", type=Path, required=True)
 
     features = subparsers.add_parser(
         "compute-technical-features", help="compute fixed-parameter daily technical features"
@@ -394,6 +407,76 @@ def run_baostock_capture(args: argparse.Namespace) -> int:
         return 1
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     return 0
+
+
+def run_market_context_capture(args: argparse.Namespace) -> int:
+    config = None
+    try:
+        config = MarketContextConfig(
+            start=args.start,
+            end=args.end,
+            as_of=args.as_of,
+            received_at=args.received_at,
+        )
+        report = BaostockMarketContextSource(config).capture(
+            calendar_path=args.calendar,
+            output_dir=args.output_dir,
+        )
+    except Exception as exc:
+        request = (
+            config.request_mapping()
+            if config is not None
+            else {
+                "as_of": args.as_of.isoformat(),
+                "end": args.end.isoformat(),
+                "indexes": list(INDEX_SYMBOLS),
+                "received_at": args.received_at.isoformat(),
+                "start": args.start.isoformat(),
+            }
+        )
+        snapshot = {
+            "as_of": args.as_of.isoformat(),
+            "indexes": [],
+            "market_context_version": MARKET_CONTEXT_VERSION,
+            "received_at": args.received_at.isoformat(),
+            "request": request,
+        }
+        request_bytes = (
+            json.dumps(request, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+        ).encode("utf-8")
+        raw_bytes = b"{}\n"
+        snapshot_bytes = (
+            json.dumps(snapshot, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+        ).encode("utf-8")
+        report = {
+            "as_of": args.as_of.isoformat(),
+            "calendar_sha256": None,
+            "calendar_version": None,
+            "decision_ready": False,
+            "end": args.end.isoformat(),
+            "index_reports": {},
+            "index_symbols": list(INDEX_SYMBOLS),
+            "market_context_ready": False,
+            "market_context_version": MARKET_CONTEXT_VERSION,
+            "raw_response_sha256": sha256_bytes(raw_bytes),
+            "received_at": args.received_at.isoformat(),
+            "request": request,
+            "snapshot_sha256": sha256_bytes(snapshot_bytes),
+            "start": args.start.isoformat(),
+            "status": "invalid",
+            "issues": [{"code": "PROVIDER_ERROR", "message": str(exc)}],
+        }
+        write_atomic(args.output_dir / "request.json", request_bytes)
+        write_atomic(args.output_dir / "raw_response.json", raw_bytes)
+        write_atomic(args.output_dir / "market_context_snapshot.json", snapshot_bytes)
+        write_atomic(
+            args.output_dir / "market_context_report.json",
+            (json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(
+                "utf-8"
+            ),
+        )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("market_context_ready") is True else 1
 
 
 def run_technical_features(args: argparse.Namespace) -> int:
@@ -814,6 +897,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_coverage_audit(args)
     if args.command == "capture-baostock-daily":
         return run_baostock_capture(args)
+    if args.command == "capture-market-context":
+        return run_market_context_capture(args)
     if args.command == "compute-technical-features":
         return run_technical_features(args)
     if args.command == "compute-price-plan":

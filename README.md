@@ -194,6 +194,29 @@ The DeepSeek request contains no local paths, hashes, original files, or API
 key. It writes the same audit artifacts as the OpenAI provider and never falls
 back or retries.
 
+## Benchmark market-context snapshot
+
+The `market-context-v1` command captures a read-only, point-in-time snapshot of
+three fixed Baostock indexes: `000001.SH` (上证综合指数), `399001.SZ` (深证成指),
+and `399006.SZ` (创业板指). It does not ask DeepSeek for a market judgment and
+does not produce a trading conclusion.
+
+```bash
+python -m a_share_ai.cli capture-market-context \
+  --start 2026-01-02 \
+  --end 2026-01-06 \
+  --as-of 2026-01-06T12:00:00+00:00 \
+  --received-at 2026-01-07T00:00:00+00:00 \
+  --calendar fixtures/market/calendar/sample.json \
+  --output-dir reports/market-context-001
+```
+
+The command writes `request.json`, `raw_response.json`,
+`market_context_snapshot.json`, and `market_context_report.json`. It validates
+calendar coverage, point-in-time boundaries, complete coverage for all three
+indexes, Decimal OHLCV values, and SHA-256 audit hashes. Any provider or data
+failure keeps `market_context_ready=false` and `decision_ready=false`.
+
 ## Render a readable research report
 
 After a successful `analyze-input` run, render the validated JSON and evidence
