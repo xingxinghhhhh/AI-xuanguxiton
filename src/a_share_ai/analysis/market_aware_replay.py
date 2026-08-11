@@ -104,8 +104,11 @@ def replay_market_aware_analysis(
     bundle_path: Path,
     bundle_report_path: Path,
     input_root: Path,
-    response_fixture: Path,
+    response_fixture: Path | None,
     output_dir: Path,
+    provider: str = "offline",
+    model: str = "offline",
+    env_file: Path | None = None,
 ) -> dict[str, Any]:
     """Replay the v2 research chain through a pending-only review packet."""
 
@@ -189,14 +192,20 @@ def replay_market_aware_analysis(
     decision_dir = output_dir / "decision-input"
     safety_dir = output_dir / "safety"
     review_dir = output_dir / "review"
+    if provider == "offline" and response_fixture is None:
+        base["issues"].append(
+            {"code": "INPUT_INVALID", "message": "offline replay requires a response fixture"}
+        )
+        return _write_report(output_dir, base)
     analysis_config = AnalysisReportConfig(
         bundle_path=bundle_path,
         bundle_report=bundle_report_path,
         input_root=input_root,
         response_fixture=response_fixture,
         output_dir=analysis_dir,
-        provider="offline",
-        model="offline",
+        provider=provider,
+        model=model,
+        env_file=env_file,
     )
 
     def finish(

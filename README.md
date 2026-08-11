@@ -280,6 +280,26 @@ records stage paths and SHA-256 values and verifies that
 stops on the first failed stage, never calls DeepSeek, never creates a review
 result or research release, and keeps `decision_ready=false`.
 
+## Market-aware DeepSeek smoke test
+
+After an explicit v2 input bundle is available, a single controlled DeepSeek
+smoke test can be run with the configured local environment file:
+
+```bash
+python -m a_share_ai.cli market-aware-smoke \
+  --bundle reports/market-aware-smoke-node27-20260811/input/analysis_input/analysis_input_bundle.json \
+  --bundle-report reports/market-aware-smoke-node27-20260811/input/analysis_input/analysis_input_report.json \
+  --input-root reports/market-aware-smoke-node27-20260811/input \
+  --env-file .env.local \
+  --model deepseek-v4-flash \
+  --output-dir reports/market-aware-smoke-node27-20260811/smoke
+```
+
+The command makes one request with no retry, fallback, or provider switching,
+records redacted provider/request/response audit metadata, and then reuses the
+offline replay chain. A provider or downstream schema failure stops the chain;
+it never fabricates readiness or creates a review result/research release.
+
 ## Render a readable research report
 
 After a successful `analyze-input` run, render the validated JSON and evidence

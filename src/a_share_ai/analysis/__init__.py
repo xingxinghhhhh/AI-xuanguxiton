@@ -19,6 +19,10 @@ from .market_aware_replay import (
     MarketAwareReplayError,
     replay_market_aware_analysis,
 )
+from .market_aware_smoke import (
+    MARKET_AWARE_SMOKE_VERSION,
+    smoke_market_aware_analysis,
+)
 from .offline_provider import AnalysisProvider, OfflineAnalysisProvider, ProviderError
 from .quality import ANALYSIS_QUALITY_VERSION, AnalysisQualityError, audit_analysis_quality
 from .real_provider import OpenAIAnalysisProvider, ProviderTransportError, UrllibResponseTransport
@@ -104,6 +108,8 @@ __all__ = [
     "MARKET_AWARE_REPLAY_VERSION",
     "MarketAwareReplayError",
     "replay_market_aware_analysis",
+    "MARKET_AWARE_SMOKE_VERSION",
+    "smoke_market_aware_analysis",
     "audit_analysis_safety",
     "build_analysis_review",
     "ANALYSIS_REVIEW_RECORD_VERSION",
