@@ -12,6 +12,7 @@ from .analysis.contracts import AnalysisReportConfig
 from .analysis.quality import audit_analysis_quality
 from .analysis.release_diff import compare_research_releases
 from .analysis.renderer import render_analysis
+from .analysis.research_freshness import audit_research_freshness
 from .analysis.research_release import build_research_release
 from .analysis.review import build_analysis_review
 from .analysis.review_record import apply_analysis_review
@@ -264,6 +265,16 @@ def _build_parser() -> argparse.ArgumentParser:
     release_diff.add_argument("--previous-artifact-root", type=Path, required=True)
     release_diff.add_argument("--current-artifact-root", type=Path, required=True)
     release_diff.add_argument("--output-dir", type=Path, required=True)
+
+    freshness = subparsers.add_parser(
+        "audit-research-freshness", help="audit research release freshness"
+    )
+    freshness.add_argument("--release-manifest", type=Path, required=True)
+    freshness.add_argument("--release-report", type=Path, required=True)
+    freshness.add_argument("--calendar", type=Path, required=True)
+    freshness.add_argument("--calendar-report", type=Path, required=True)
+    freshness.add_argument("--evaluation-at", type=_parse_as_of, required=True)
+    freshness.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -779,6 +790,19 @@ def run_release_diff(args: argparse.Namespace) -> int:
     return 0 if report.get("comparison_ready") is True else 1
 
 
+def run_research_freshness(args: argparse.Namespace) -> int:
+    report = audit_research_freshness(
+        release_manifest_path=args.release_manifest,
+        release_report_path=args.release_report,
+        calendar_path=args.calendar,
+        calendar_report_path=args.calendar_report,
+        evaluation_at=args.evaluation_at,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("freshness_ready") is True else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -820,6 +844,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_research_release(args)
     if args.command == "compare-research-releases":
         return run_release_diff(args)
+    if args.command == "audit-research-freshness":
+        return run_research_freshness(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

@@ -239,6 +239,28 @@ cross-checked input snapshot for a future decision module. This is an input
 readiness gate only; it is not a trading authorization and always keeps
 `decision_ready=false`.
 
+## Research freshness audit
+
+Check whether a published research package corresponds to the latest completed
+trading day at a fixed evaluation time:
+
+```bash
+python -m a_share_ai.cli audit-research-freshness \
+  --release-manifest reports/analysis-deepseek-001/release/research_release_manifest.json \
+  --release-report reports/analysis-deepseek-001/release/research_release_report.json \
+  --calendar fixtures/market/calendar/sample.json \
+  --calendar-report reports/calendar_report.json \
+  --evaluation-at 2026-08-11T08:00:00+00:00 \
+  --output-dir reports/analysis-deepseek-001/freshness
+```
+
+The `research-freshness-v1` report uses Asia/Shanghai and a fixed 15:00 close:
+before the close, the current day is not complete; after the close, it may be
+the latest completed trading day; weekends and holidays fall back to the prior
+trading day. It returns `fresh`, `stale`, `calendar_unknown`, or `invalid`, and
+always keeps `decision_ready=false`. It does not use system current time or
+make any investment or transaction judgement.
+
 ```bash
 python -m a_share_ai.cli build-decision-input \
   --analysis reports/analysis-deepseek-001/research_analysis.json \

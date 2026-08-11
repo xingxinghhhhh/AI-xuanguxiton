@@ -30,6 +30,11 @@ from .request_builder import (
     build_openai_request,
     provider_output_schema,
 )
+from .research_freshness import (
+    RESEARCH_FRESHNESS_VERSION,
+    ResearchFreshnessError,
+    audit_research_freshness,
+)
 from .research_release import (
     RESEARCH_RELEASE_VERSION,
     ResearchReleaseError,
@@ -99,6 +104,9 @@ __all__ = [
     "RESEARCH_RELEASE_VERSION",
     "ResearchReleaseError",
     "build_research_release",
+    "RESEARCH_FRESHNESS_VERSION",
+    "ResearchFreshnessError",
+    "audit_research_freshness",
     "RESEARCH_RELEASE_DIFF_VERSION",
     "ResearchReleaseDiffError",
     "compare_research_releases",
