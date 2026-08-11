@@ -18,6 +18,7 @@ from .analysis.technical_features import (
     serialize_feature_snapshots,
 )
 from .analysis.validator import AnalysisReportSource
+from .decision.decision_input import build_decision_input
 from .decision.technical_price_plan import (
     PricePlanIssue,
     PricePlanReport,
@@ -191,6 +192,20 @@ def _build_parser() -> argparse.ArgumentParser:
     quality.add_argument("--render-report", type=Path, required=True)
     quality.add_argument("--input-root", type=Path, required=True)
     quality.add_argument("--output-dir", type=Path, required=True)
+
+    decision_input = subparsers.add_parser(
+        "build-decision-input",
+        help="build a verified non-trading decision input snapshot",
+    )
+    decision_input.add_argument("--analysis", type=Path, required=True)
+    decision_input.add_argument("--analysis-report", type=Path, required=True)
+    decision_input.add_argument("--render-report", type=Path, required=True)
+    decision_input.add_argument("--quality-report", type=Path, required=True)
+    decision_input.add_argument("--bundle", type=Path, required=True)
+    decision_input.add_argument("--bundle-report", type=Path, required=True)
+    decision_input.add_argument("--input-root", type=Path, required=True)
+    decision_input.add_argument("--artifact-root", type=Path, required=True)
+    decision_input.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -622,6 +637,22 @@ def run_analysis_quality(args: argparse.Namespace) -> int:
     return 0 if report.get("quality_ready") is True else 1
 
 
+def run_decision_input(args: argparse.Namespace) -> int:
+    report = build_decision_input(
+        analysis_path=args.analysis,
+        analysis_report_path=args.analysis_report,
+        render_report_path=args.render_report,
+        quality_report_path=args.quality_report,
+        bundle_path=args.bundle,
+        bundle_report_path=args.bundle_report,
+        input_root=args.input_root,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("decision_input_ready") is True else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -651,6 +682,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":
         return run_analysis_quality(args)
+    if args.command == "build-decision-input":
+        return run_decision_input(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

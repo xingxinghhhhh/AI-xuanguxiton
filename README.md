@@ -231,3 +231,28 @@ python -m a_share_ai.cli audit-analysis-quality \
 The command writes `analysis_quality_report.json` with `quality_ready=true`
 only when the complete evidence audit passes. It never calls an AI provider,
 reads credentials, or sets `decision_ready=true`.
+
+## Decision input readiness snapshot
+
+After the analysis, render, and quality artifacts all pass, build a final
+cross-checked input snapshot for a future decision module. This is an input
+readiness gate only; it is not a trading authorization and always keeps
+`decision_ready=false`.
+
+```bash
+python -m a_share_ai.cli build-decision-input \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --render-report reports/analysis-deepseek-001/rendered/analysis_render_report.json \
+  --quality-report reports/analysis-deepseek-001/quality/analysis_quality_report.json \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/decision-input
+```
+
+The command writes `decision_input_snapshot.json` and
+`decision_input_report.json`, verifies the upstream paths, hashes, versions,
+symbol, cutoff time, readiness states, and future-date guard, and never calls
+AI, reads API keys, or produces BUY/SELL/HOLD output.
