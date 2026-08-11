@@ -25,6 +25,7 @@ from .request_builder import (
     build_openai_request,
     provider_output_schema,
 )
+from .safety import ANALYSIS_SAFETY_VERSION, AnalysisSafetyError, audit_analysis_safety
 from .technical_features import (
     INDICATOR_VERSION,
     TechnicalFeatureReport,
@@ -47,6 +48,8 @@ __all__ = [
     "AnalysisRenderError",
     "AnalysisQualityError",
     "ANALYSIS_QUALITY_VERSION",
+    "AnalysisSafetyError",
+    "ANALYSIS_SAFETY_VERSION",
     "AnalysisValidationError",
     "DeepSeekAnalysisProvider",
     "DeepSeekTransportError",
@@ -70,4 +73,5 @@ __all__ = [
     "provider_output_schema",
     "render_analysis",
     "audit_analysis_quality",
+    "audit_analysis_safety",
 ]

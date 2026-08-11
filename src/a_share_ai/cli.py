@@ -11,6 +11,7 @@ from pathlib import Path
 from .analysis.contracts import AnalysisReportConfig
 from .analysis.quality import audit_analysis_quality
 from .analysis.renderer import render_analysis
+from .analysis.safety import audit_analysis_safety
 from .analysis.technical_features import (
     TechnicalFeatureReport,
     build_feature_report,
@@ -206,6 +207,17 @@ def _build_parser() -> argparse.ArgumentParser:
     decision_input.add_argument("--input-root", type=Path, required=True)
     decision_input.add_argument("--artifact-root", type=Path, required=True)
     decision_input.add_argument("--output-dir", type=Path, required=True)
+
+    safety = subparsers.add_parser(
+        "audit-analysis-safety", help="audit analysis output for non-trading safety"
+    )
+    safety.add_argument("--decision-input", type=Path, required=True)
+    safety.add_argument("--decision-input-report", type=Path, required=True)
+    safety.add_argument("--analysis", type=Path, required=True)
+    safety.add_argument("--analysis-report", type=Path, required=True)
+    safety.add_argument("--render-report", type=Path, required=True)
+    safety.add_argument("--artifact-root", type=Path, required=True)
+    safety.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -653,6 +665,20 @@ def run_decision_input(args: argparse.Namespace) -> int:
     return 0 if report.get("decision_input_ready") is True else 1
 
 
+def run_analysis_safety(args: argparse.Namespace) -> int:
+    report = audit_analysis_safety(
+        decision_input_path=args.decision_input,
+        decision_input_report_path=args.decision_input_report,
+        analysis_path=args.analysis,
+        analysis_report_path=args.analysis_report,
+        render_report_path=args.render_report,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("safety_ready") is True else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -684,6 +710,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_analysis_quality(args)
     if args.command == "build-decision-input":
         return run_decision_input(args)
+    if args.command == "audit-analysis-safety":
+        return run_analysis_safety(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

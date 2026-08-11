@@ -256,3 +256,26 @@ The command writes `decision_input_snapshot.json` and
 `decision_input_report.json`, verifies the upstream paths, hashes, versions,
 symbol, cutoff time, readiness states, and future-date guard, and never calls
 AI, reads API keys, or produces BUY/SELL/HOLD output.
+
+## Analysis safety audit
+
+Before a future decision module consumes the snapshot, audit the final
+structured claims and rendered Markdown for action-oriented or execution
+language:
+
+```bash
+python -m a_share_ai.cli audit-analysis-safety \
+  --decision-input reports/analysis-deepseek-001/decision-input/decision_input_snapshot.json \
+  --decision-input-report reports/analysis-deepseek-001/decision-input/decision_input_report.json \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --render-report reports/analysis-deepseek-001/rendered/analysis_render_report.json \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/safety
+```
+
+The command writes `analysis_safety_report.json`. It checks the complete input
+chain and reports stable rule IDs and locations for forbidden actions, prices,
+positions, recommendations, unexpected decision fields, and Markdown/HTML/link
+or code-fence bypasses. `safety_ready=true` is independent of
+`decision_input_ready` and never changes `decision_ready=false`.
