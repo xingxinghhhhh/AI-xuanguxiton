@@ -111,6 +111,12 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _redact_secret(message: str, secret: str | None) -> str:
+    if secret:
+        message = message.replace(secret, "<redacted>")
+    return message
+
+
 class OpenAIAnalysisProvider:
     """Call the OpenAI Responses API once and return the strict provider JSON."""
 
@@ -202,12 +208,12 @@ class OpenAIAnalysisProvider:
             return provider_payload
         except (ProviderError, RequestBuildError) as exc:
             self._status = "error"
-            self._error = str(exc)
+            self._error = _redact_secret(str(exc), self._api_key)
             self._received_at = _utc_now()
-            raise ProviderError(str(exc)) from exc
+            raise ProviderError(self._error) from exc
         except Exception as exc:  # pragma: no cover - final provider safety gate
             self._status = "error"
-            self._error = f"OpenAI provider error: {exc}"
+            self._error = _redact_secret(f"OpenAI provider error: {exc}", self._api_key)
             self._received_at = _utc_now()
             raise ProviderError(self._error) from exc
 

@@ -124,6 +124,20 @@ def test_transport_error_is_fail_closed_and_sanitized(tmp_path: Path) -> None:
     }
 
 
+def test_transport_error_cannot_echo_api_key(tmp_path: Path) -> None:
+    secret = "test-secret-key"
+    transport = FakeTransport(ProviderTransportError(f"upstream detail: {secret}"))
+    provider = OpenAIAnalysisProvider(model="test-model", api_key=secret, transport=transport)
+
+    with pytest.raises(ProviderError, match="<redacted>") as error:
+        provider.load(bundle=_bundle_and_entries()[0], entries=_bundle_and_entries()[1])
+    provider.write_audit_files(tmp_path)
+
+    assert secret not in str(error.value)
+    assert secret not in json.dumps(provider.audit_metadata(), ensure_ascii=False)
+    assert secret not in (tmp_path / "ai_response.json").read_text(encoding="utf-8")
+
+
 def test_missing_key_never_calls_transport(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
