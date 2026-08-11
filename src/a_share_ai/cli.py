@@ -8,12 +8,14 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from .analysis.contracts import AnalysisReportConfig
 from .analysis.technical_features import (
     TechnicalFeatureReport,
     build_feature_report,
     compute_feature_snapshots,
     serialize_feature_snapshots,
 )
+from .analysis.validator import AnalysisReportSource
 from .decision.technical_price_plan import (
     PricePlanIssue,
     PricePlanReport,
@@ -155,6 +157,21 @@ def _build_parser() -> argparse.ArgumentParser:
     evidence.add_argument("--announcements-snapshot", type=Path, required=True)
     evidence.add_argument("--announcements-report", type=Path, required=True)
     evidence.add_argument("--output-dir", type=Path, required=True)
+
+    analysis = subparsers.add_parser(
+        "analyze-input", help="build an evidence-backed research analysis report"
+    )
+    analysis.add_argument("--bundle", type=Path, required=True)
+    analysis.add_argument("--bundle-report", type=Path)
+    analysis.add_argument("--input-root", type=Path, required=True)
+    analysis.add_argument(
+        "--provider", choices=("offline", "openai"), default="offline"
+    )
+    analysis.add_argument("--response-fixture", type=Path)
+    analysis.add_argument("--model", default="gpt-5.6-luna")
+    analysis.add_argument("--timeout-seconds", type=float, default=60.0)
+    analysis.add_argument("--env-file", type=Path)
+    analysis.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -537,6 +554,29 @@ def run_analysis_input(args: argparse.Namespace) -> int:
     return 0 if report.get("analysis_input_ready") is True else 1
 
 
+def run_analysis_report(args: argparse.Namespace) -> int:
+    if args.provider == "offline" and args.response_fixture is None:
+        raise SystemExit("analyze-input --provider offline requires --response-fixture")
+    if args.provider == "openai" and args.response_fixture is not None:
+        raise SystemExit("analyze-input --provider openai does not accept --response-fixture")
+    if args.timeout_seconds <= 0:
+        raise SystemExit("analyze-input --timeout-seconds must be positive")
+    config = AnalysisReportConfig(
+        bundle_path=args.bundle,
+        bundle_report=args.bundle_report,
+        input_root=args.input_root,
+        response_fixture=args.response_fixture,
+        output_dir=args.output_dir,
+        provider=args.provider,
+        model=args.model,
+        timeout_seconds=args.timeout_seconds,
+        env_file=args.env_file,
+    )
+    report = AnalysisReportSource(config).capture()
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("analysis_ready") is True else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -560,6 +600,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_announcements_capture(args)
     if args.command == "build-analysis-input":
         return run_analysis_input(args)
+    if args.command == "analyze-input":
+        return run_analysis_report(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

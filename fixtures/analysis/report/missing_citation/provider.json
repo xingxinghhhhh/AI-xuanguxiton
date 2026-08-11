@@ -1,0 +1,24 @@
+{
+  "analysis_version": "analysis-report-v1",
+  "as_of": "2026-08-10T12:00:00+00:00",
+  "schema_version": "1.0",
+  "sections": {
+    "announcements": [],
+    "growth": [],
+    "market": [],
+    "price_plan": [],
+    "profitability": [],
+    "risks": [],
+    "technical": [
+      {
+        "claim_id": "missing-citation",
+        "citation_ids": [],
+        "kind": "observation",
+        "observed_dates": [],
+        "text": "技术观察缺少可回溯证据。"
+      }
+    ],
+    "unknowns": []
+  },
+  "symbol": "600000.SH"
+}

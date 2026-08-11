@@ -108,3 +108,58 @@ python -m a_share_ai.cli capture-announcements \
 The command is intentionally single-symbol and low-frequency. Future, malformed,
 duplicated, out-of-order, unavailable, or incomplete evidence is fail-closed and
 keeps `decision_ready=false`.
+
+## Evidence-backed offline analysis report
+
+The `analysis-report-v1` node converts an already validated
+`analysis-input-v1` bundle into a deterministic research report. It uses an
+offline JSON response fixture as the provider boundary, expands stable bundle
+names into a top-level citation index with paths and SHA-256 values, and never
+produces a trade decision.
+
+```bash
+python -m a_share_ai.cli analyze-input \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --input-root reports \
+  --response-fixture fixtures/analysis/report/valid_provider.json \
+  --output-dir reports/analysis-report-001
+```
+
+The command writes `research_analysis.json` and
+`research_analysis_report.json`. Any bundle, evidence, provider, symbol,
+cutoff, citation, future-date, or prohibited-decision violation is
+fail-closed with `analysis_ready=false`; `decision_ready` remains false for
+every result. No real AI API, credentials, network, database, or trading path
+is used.
+
+## Explicit OpenAI research provider
+
+The real provider is opt-in and single-request only. It sends only the validated
+bundle summaries, symbol, cutoff, and fixed evidence IDs to the OpenAI Responses
+API. Local evidence paths, hashes, credentials, and original files are not sent.
+The response is validated by the same `analysis-report-v1` fail-closed validator;
+`decision_ready` remains `false` even when `analysis_ready` is `true`.
+
+Configure the key locally in the ignored `.env.local` file:
+
+```env
+OPENAI_API_KEY=your_key_here
+```
+
+Run the real provider explicitly; it never falls back to the offline fixture:
+
+```bash
+python -m a_share_ai.cli analyze-input \
+  --provider openai \
+  --model gpt-5.6-luna \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --output-dir reports/analysis-openai-001
+```
+
+The command writes `ai_request.json`, `ai_response.json`,
+`research_analysis.json`, and `research_analysis_report.json`. Request and
+response SHA-256 values, provider status, model, and timestamps are recorded;
+the API key is never written to those files or CLI output. Ordinary tests use a
+fake transport and remain offline.
