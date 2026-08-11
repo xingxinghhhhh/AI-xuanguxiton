@@ -86,3 +86,34 @@ def test_deepseek_request_uses_json_mode_without_responses_schema() -> None:
     assert "claim_id" in request["messages"][0]["content"]
     assert "citation_ids" in request["messages"][0]["content"]
     assert '"description":' not in request["messages"][0]["content"]
+
+
+def test_market_context_summary_is_forwarded_as_structured_values_only() -> None:
+    bundle, entries = _bundle_and_entries()
+    bundle["bundle_version"] = "analysis-input-v2"
+    bundle["summaries"]["market"]["market_context"] = {
+        "version": "market-context-v1",
+        "market_context_summary_version": "market-context-summary-v1",
+        "index_features": {
+            "000001.SH": {
+                "latest_trade_date": "2026-08-07",
+                "latest_close": "103",
+                "return_1d": "0.03",
+                "return_5d": None,
+                "return_20d": None,
+                "record_count": 2,
+            }
+        },
+    }
+
+    request = build_deepseek_request(bundle, entries, model="deepseek-v4-flash")
+    serialized = json.dumps(request, ensure_ascii=False, sort_keys=True)
+    context = json.loads(request["messages"][1]["content"])
+
+    assert "market-context-summary-v1" in serialized
+    assert context["evidence"][0]["summary"]["market_context"]["index_features"]["000001.SH"][
+        "latest_close"
+    ] == "103"
+    assert "market_context_snapshot" not in serialized
+    assert "raw_response" not in serialized
+    assert "C:/private" not in serialized

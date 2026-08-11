@@ -7,7 +7,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from ..evidence.contracts import BUNDLE_VERSION_V2, SUPPORTED_BUNDLE_VERSIONS
+from ..evidence.contracts import (
+    BUNDLE_VERSION_V2,
+    MARKET_CONTEXT_SUMMARY_VERSION,
+    SUPPORTED_BUNDLE_VERSIONS,
+)
 from ..market.replay import sha256_bytes, write_atomic
 from .contracts import ANALYSIS_REPORT_VERSION, ANALYSIS_SECTIONS, EVIDENCE_IDS
 
@@ -164,7 +168,12 @@ def _audit_valid_inputs(
             if isinstance(summaries, dict)
             else None
         )
-        if not isinstance(context, dict) or context.get("version") != "market-context-v1":
+        if (
+            not isinstance(context, dict)
+            or context.get("version") != "market-context-v1"
+            or context.get("market_context_summary_version")
+            != MARKET_CONTEXT_SUMMARY_VERSION
+        ):
             raise AnalysisQualityError(
                 "MARKET_CONTEXT_INVALID", "analysis-input-v2 must include market context"
             )

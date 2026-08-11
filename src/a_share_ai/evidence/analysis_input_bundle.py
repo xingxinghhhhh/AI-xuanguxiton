@@ -10,6 +10,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, localcontext
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from ..market.replay import sha256_bytes, write_atomic
 from .contracts import (
     BUNDLE_VERSION_V1,
     BUNDLE_VERSION_V2,
+    MARKET_CONTEXT_SUMMARY_VERSION,
     SCHEMA_VERSION,
     AnalysisInputBundle,
     AnalysisInputReport,
@@ -353,15 +355,46 @@ class AnalysisInputSource:
                 raise BundleError(f"market context record count mismatch: {symbol}")
             if len({record.trade_date for record in rows}) != len(rows):
                 raise BundleError(f"market context contains duplicate dates: {symbol}")
+            dates = [record.trade_date for record in rows]
+            if dates != sorted(dates):
+                raise BundleError(f"market context dates are not ascending: {symbol}")
+            if any(record.close <= 0 for record in rows):
+                raise BundleError(f"market context close must be positive: {symbol}")
+
+        def decimal_text(value: Decimal) -> str:
+            return format(value, "f")
+
+        index_features: dict[str, dict[str, Any]] = {}
+        with localcontext() as context:
+            context.prec = 28
+            for symbol in INDEX_SYMBOLS:
+                rows = by_symbol[symbol]
+                latest = rows[-1]
+
+                def return_for(periods: int) -> str | None:
+                    if len(rows) <= periods:
+                        return None
+                    return decimal_text(latest.close / rows[-periods - 1].close - Decimal("1"))
+
+                index_features[symbol] = {
+                    "latest_trade_date": latest.trade_date.isoformat(),
+                    "latest_close": decimal_text(latest.close),
+                    "return_1d": return_for(1),
+                    "return_5d": return_for(5),
+                    "return_20d": return_for(20),
+                    "record_count": len(rows),
+                }
         report_rel, report_sha = _hash_path(cfg.market_context_report, cfg.input_root)
         snapshot_rel, snapshot_sha = _hash_path(cfg.market_context_snapshot, cfg.input_root)
         return report_rel, report_sha, snapshot_rel, snapshot_sha, {
             "status": report.get("status"),
             "version": MARKET_CONTEXT_VERSION,
+            "market_context_summary_version": MARKET_CONTEXT_SUMMARY_VERSION,
             "index_symbols": list(INDEX_SYMBOLS),
             "record_count": len(records),
             "start": report.get("start"),
             "end": report.get("end"),
+            "index_features": index_features,
         }
 
     def _inspect_market(self) -> _Inspection:

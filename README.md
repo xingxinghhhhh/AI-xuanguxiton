@@ -241,6 +241,12 @@ calendar hash/version, exact `as_of`, fixed index set, record hashes and
 point-in-time dates. All analysis, quality, decision-input, and safety outputs
 continue to keep `decision_ready=false`.
 
+The v2 market summary also includes the deterministic
+`market-context-summary-v1` features `latest_trade_date`, `latest_close`,
+`return_1d`, `return_5d`, `return_20d`, and `record_count` for each fixed index.
+Returns use `close_latest / close_n_periods_ago - 1`; unavailable warmup periods
+are represented as `null`.
+
 ## Render a readable research report
 
 After a successful `analyze-input` run, render the validated JSON and evidence

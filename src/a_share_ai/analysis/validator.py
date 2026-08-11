@@ -12,7 +12,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from ..evidence.contracts import BUNDLE_VERSION_V2, SUPPORTED_BUNDLE_VERSIONS
+from ..evidence.contracts import (
+    BUNDLE_VERSION_V2,
+    MARKET_CONTEXT_SUMMARY_VERSION,
+    SUPPORTED_BUNDLE_VERSIONS,
+)
 from ..market.replay import sha256_bytes, write_atomic
 from .contracts import (
     ALLOWED_CLAIM_KINDS,
@@ -193,7 +197,12 @@ def _validate_bundle(
     if bundle_version == BUNDLE_VERSION_V2:
         market_summary = summaries.get("market")
         context = market_summary.get("market_context") if isinstance(market_summary, dict) else None
-        if not isinstance(context, dict) or context.get("version") != "market-context-v1":
+        if (
+            not isinstance(context, dict)
+            or context.get("version") != "market-context-v1"
+            or context.get("market_context_summary_version")
+            != MARKET_CONTEXT_SUMMARY_VERSION
+        ):
             raise AnalysisValidationError(
                 "MARKET_CONTEXT_INVALID", "analysis-input-v2 must include a ready market context summary"
             )

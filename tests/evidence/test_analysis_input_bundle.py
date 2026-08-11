@@ -178,6 +178,7 @@ def build_artifacts(root: Path, *, mixed_as_of: bool = False, future_feature: bo
 
 
 def add_market_context(config: AnalysisInputConfig) -> AnalysisInputConfig:
+    context_dates = ("2026-08-06", "2026-08-07")
     calendar_raw = write_json(
         config.calendar,
         {
@@ -185,9 +186,9 @@ def add_market_context(config: AnalysisInputConfig) -> AnalysisInputConfig:
             "calendar_version": "fixture-calendar-v1",
             "market": "CN",
             "timezone": "Asia/Shanghai",
-            "covered_start": "2026-08-07",
+            "covered_start": "2026-08-06",
             "covered_end": "2026-08-07",
-            "trading_dates": ["2026-08-07"],
+            "trading_dates": list(context_dates),
         },
     )
     coverage = json.loads(config.coverage_report.read_text(encoding="utf-8"))
@@ -197,27 +198,30 @@ def add_market_context(config: AnalysisInputConfig) -> AnalysisInputConfig:
     snapshot_path = context_dir / "market_context_snapshot.json"
     report_path = context_dir / "market_context_report.json"
     as_of = config.as_of.isoformat()
-    records = [
-        {
-            "symbol": symbol,
-            "instrument_type": "index",
-            "trade_date": "2026-08-07",
-            "open": "100",
-            "high": "105",
-            "low": "99",
-            "close": "103",
-            "volume": "1000",
-            "amount": "103000",
-            "source": "baostock",
-            "market_time": "2026-08-07T15:00:00+08:00",
-            "received_at": as_of,
-            "data_status": "connected",
-        }
-        for symbol in ("000001.SH", "399001.SZ", "399006.SZ")
-    ]
+    records = []
+    for symbol in ("000001.SH", "399001.SZ", "399006.SZ"):
+        for index, trade_date in enumerate(context_dates):
+            close = "100" if index == 0 else "103"
+            records.append(
+                {
+                    "symbol": symbol,
+                    "instrument_type": "index",
+                    "trade_date": trade_date,
+                    "open": close,
+                    "high": "105" if index else "102",
+                    "low": "99",
+                    "close": close,
+                    "volume": "1000",
+                    "amount": "100000" if index == 0 else "103000",
+                    "source": "baostock",
+                    "market_time": f"{trade_date}T15:00:00+08:00",
+                    "received_at": as_of,
+                    "data_status": "connected",
+                }
+            )
     request = {
         "as_of": as_of,
-        "start": "2026-08-07",
+        "start": "2026-08-06",
         "end": "2026-08-07",
         "indexes": [{"symbol": symbol} for symbol in ("000001.SH", "399001.SZ", "399006.SZ")],
     }
@@ -242,8 +246,8 @@ def add_market_context(config: AnalysisInputConfig) -> AnalysisInputConfig:
             "end": "2026-08-07",
             "index_reports": {
                 symbol: {
-                    "record_count": 1,
-                    "start": "2026-08-07",
+                    "record_count": 2,
+                    "start": "2026-08-06",
                     "end": "2026-08-07",
                     "missing_trading_dates": [],
                     "status": "ready",
@@ -257,7 +261,7 @@ def add_market_context(config: AnalysisInputConfig) -> AnalysisInputConfig:
             "received_at": as_of,
             "request": request,
             "snapshot_sha256": sha256_bytes(snapshot_raw),
-            "start": "2026-08-07",
+            "start": "2026-08-06",
             "status": "ready",
             "issues": [],
         },
@@ -293,8 +297,20 @@ def test_v2_bundle_adds_market_context_to_existing_market_evidence(tmp_path: Pat
     assert report["bundle_version"] == "analysis-input-v2"
     bundle = json.loads((tmp_path / "out" / "analysis_input_bundle.json").read_text(encoding="utf-8"))
     market = next(entry for entry in bundle["evidence"] if entry["name"] == "market")
-    assert bundle["summaries"]["market"]["market_context"]["version"] == "market-context-v1"
+    context_summary = bundle["summaries"]["market"]["market_context"]
+    assert context_summary["version"] == "market-context-v1"
+    assert context_summary["market_context_summary_version"] == "market-context-summary-v1"
+    assert context_summary["index_features"]["000001.SH"] == {
+        "latest_trade_date": "2026-08-07",
+        "latest_close": "103",
+        "return_1d": "0.03",
+        "return_5d": None,
+        "return_20d": None,
+        "record_count": 2,
+    }
     assert len(market["artifact_paths"]) == 5
+    second = AnalysisInputSource(config).capture(tmp_path / "out-2")
+    assert report["bundle_sha256"] == second["bundle_sha256"]
 
 
 def test_v2_context_hash_tampering_fails_closed(tmp_path: Path) -> None:
@@ -306,6 +322,36 @@ def test_v2_context_hash_tampering_fails_closed(tmp_path: Path) -> None:
 
     assert report["status"] == "invalid"
     assert "SHA-256" in report["issues"][0]["message"]
+
+
+def test_v2_zero_close_fails_closed_in_summary_calculation(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    snapshot = json.loads(config.market_context_snapshot.read_text(encoding="utf-8"))
+    snapshot["indexes"][1]["close"] = "0"
+    snapshot_raw = write_json(config.market_context_snapshot, snapshot)
+    report_payload = json.loads(config.market_context_report.read_text(encoding="utf-8"))
+    report_payload["snapshot_sha256"] = sha256_bytes(snapshot_raw)
+    write_json(config.market_context_report, report_payload)
+
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "invalid"
+    assert "market context record is invalid" in report["issues"][0]["message"]
+
+
+def test_v2_out_of_order_context_dates_fail_closed(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    snapshot = json.loads(config.market_context_snapshot.read_text(encoding="utf-8"))
+    snapshot["indexes"][:2] = reversed(snapshot["indexes"][:2])
+    snapshot_raw = write_json(config.market_context_snapshot, snapshot)
+    report_payload = json.loads(config.market_context_report.read_text(encoding="utf-8"))
+    report_payload["snapshot_sha256"] = sha256_bytes(snapshot_raw)
+    write_json(config.market_context_report, report_payload)
+
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "invalid"
+    assert "not ascending" in report["issues"][0]["message"]
 
 
 def test_v2_bundle_is_consumable_by_offline_analysis_validator(tmp_path: Path) -> None:
