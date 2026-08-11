@@ -1,7 +1,13 @@
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
+from a_share_ai.analysis.contracts import AnalysisReportConfig
+from a_share_ai.analysis.validator import AnalysisReportSource
+from a_share_ai.cli import main
 from a_share_ai.evidence.analysis_input_bundle import AnalysisInputConfig, AnalysisInputSource
 from a_share_ai.market.replay import sha256_bytes
 
@@ -171,6 +177,98 @@ def build_artifacts(root: Path, *, mixed_as_of: bool = False, future_feature: bo
     )
 
 
+def add_market_context(config: AnalysisInputConfig) -> AnalysisInputConfig:
+    calendar_raw = write_json(
+        config.calendar,
+        {
+            "schema_version": "1.0",
+            "calendar_version": "fixture-calendar-v1",
+            "market": "CN",
+            "timezone": "Asia/Shanghai",
+            "covered_start": "2026-08-07",
+            "covered_end": "2026-08-07",
+            "trading_dates": ["2026-08-07"],
+        },
+    )
+    coverage = json.loads(config.coverage_report.read_text(encoding="utf-8"))
+    coverage["calendar_sha256"] = sha256_bytes(calendar_raw)
+    write_json(config.coverage_report, coverage)
+    context_dir = config.input_root / "market_context"
+    snapshot_path = context_dir / "market_context_snapshot.json"
+    report_path = context_dir / "market_context_report.json"
+    as_of = config.as_of.isoformat()
+    records = [
+        {
+            "symbol": symbol,
+            "instrument_type": "index",
+            "trade_date": "2026-08-07",
+            "open": "100",
+            "high": "105",
+            "low": "99",
+            "close": "103",
+            "volume": "1000",
+            "amount": "103000",
+            "source": "baostock",
+            "market_time": "2026-08-07T15:00:00+08:00",
+            "received_at": as_of,
+            "data_status": "connected",
+        }
+        for symbol in ("000001.SH", "399001.SZ", "399006.SZ")
+    ]
+    request = {
+        "as_of": as_of,
+        "start": "2026-08-07",
+        "end": "2026-08-07",
+        "indexes": [{"symbol": symbol} for symbol in ("000001.SH", "399001.SZ", "399006.SZ")],
+    }
+    snapshot_raw = write_json(
+        snapshot_path,
+        {
+            "as_of": as_of,
+            "calendar_version": "fixture-calendar-v1",
+            "indexes": records,
+            "market_context_version": "market-context-v1",
+            "received_at": as_of,
+            "request": request,
+        },
+    )
+    write_json(
+        report_path,
+        {
+            "as_of": as_of,
+            "calendar_sha256": sha256_bytes(calendar_raw),
+            "calendar_version": "fixture-calendar-v1",
+            "decision_ready": False,
+            "end": "2026-08-07",
+            "index_reports": {
+                symbol: {
+                    "record_count": 1,
+                    "start": "2026-08-07",
+                    "end": "2026-08-07",
+                    "missing_trading_dates": [],
+                    "status": "ready",
+                }
+                for symbol in ("000001.SH", "399001.SZ", "399006.SZ")
+            },
+            "index_symbols": ["000001.SH", "399001.SZ", "399006.SZ"],
+            "market_context_ready": True,
+            "market_context_version": "market-context-v1",
+            "raw_response_sha256": "0" * 64,
+            "received_at": as_of,
+            "request": request,
+            "snapshot_sha256": sha256_bytes(snapshot_raw),
+            "start": "2026-08-07",
+            "status": "ready",
+            "issues": [],
+        },
+    )
+    return replace(
+        config,
+        market_context_snapshot=snapshot_path,
+        market_context_report=report_path,
+    )
+
+
 def test_valid_bundle_references_all_inputs_and_is_deterministic(tmp_path: Path) -> None:
     root = tmp_path / "input"
     config = build_artifacts(root)
@@ -184,6 +282,95 @@ def test_valid_bundle_references_all_inputs_and_is_deterministic(tmp_path: Path)
     bundle = json.loads((tmp_path / "out-1" / "analysis_input_bundle.json").read_text(encoding="utf-8"))
     assert len(bundle["evidence"]) == 6
     assert all("artifact_paths" in entry for entry in bundle["evidence"])
+    assert bundle["bundle_version"] == "analysis-input-v1"
+
+
+def test_v2_bundle_adds_market_context_to_existing_market_evidence(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "ready"
+    assert report["bundle_version"] == "analysis-input-v2"
+    bundle = json.loads((tmp_path / "out" / "analysis_input_bundle.json").read_text(encoding="utf-8"))
+    market = next(entry for entry in bundle["evidence"] if entry["name"] == "market")
+    assert bundle["summaries"]["market"]["market_context"]["version"] == "market-context-v1"
+    assert len(market["artifact_paths"]) == 5
+
+
+def test_v2_context_hash_tampering_fails_closed(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    context_report = json.loads(config.market_context_report.read_text(encoding="utf-8"))
+    context_report["snapshot_sha256"] = "0" * 64
+    write_json(config.market_context_report, context_report)
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "invalid"
+    assert "SHA-256" in report["issues"][0]["message"]
+
+
+def test_v2_bundle_is_consumable_by_offline_analysis_validator(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    bundle_report = AnalysisInputSource(config).capture(tmp_path / "bundle")
+    assert bundle_report["status"] == "ready"
+    analysis_report = AnalysisReportSource(
+        AnalysisReportConfig(
+            bundle_path=tmp_path / "bundle" / "analysis_input_bundle.json",
+            input_root=config.input_root,
+            response_fixture=Path("fixtures/analysis/report/valid_provider.json"),
+            output_dir=tmp_path / "analysis",
+        )
+    ).capture()
+
+    assert analysis_report["status"] == "ready"
+    assert analysis_report["analysis_ready"] is True
+
+
+def test_cli_builds_v2_bundle_with_paired_context_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    flags = {
+        "market_bars": "--market-bars",
+        "market_health_report": "--market-health-report",
+        "coverage_report": "--coverage-report",
+        "calendar": "--calendar",
+        "technical_input": "--technical-input",
+        "technical_features": "--technical-features",
+        "technical_report": "--technical-report",
+        "price_plan_input": "--price-plan-input",
+        "price_plan": "--price-plan",
+        "price_plan_report": "--price-plan-report",
+        "profitability_snapshot": "--profitability-snapshot",
+        "profitability_report": "--profitability-report",
+        "growth_snapshot": "--growth-snapshot",
+        "growth_report": "--growth-report",
+        "announcements_snapshot": "--announcements-snapshot",
+        "announcements_report": "--announcements-report",
+        "market_context_snapshot": "--market-context-snapshot",
+        "market_context_report": "--market-context-report",
+    }
+    argv = [
+        "build-analysis-input",
+        "--symbol",
+        config.symbol,
+        "--as-of",
+        config.as_of.isoformat(),
+        "--input-root",
+        str(config.input_root),
+    ]
+    for field, flag in flags.items():
+        argv.extend((flag, str(getattr(config, field))))
+    argv.extend(("--output-dir", str(tmp_path / "cli-out")))
+
+    assert main(argv) == 0
+    cli_report = json.loads(capsys.readouterr().out)
+    assert cli_report["bundle_version"] == "analysis-input-v2"
+
+
+def test_context_paths_must_be_provided_as_a_pair(tmp_path: Path) -> None:
+    config = build_artifacts(tmp_path / "input")
+    with pytest.raises(RuntimeError, match="provided together"):
+        replace(config, market_context_snapshot=config.calendar)
 
 
 def test_mixed_as_of_fails_closed(tmp_path: Path) -> None:

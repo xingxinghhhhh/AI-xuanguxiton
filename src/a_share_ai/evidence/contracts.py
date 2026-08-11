@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from typing import Any
 
 SCHEMA_VERSION = "1.0"
-BUNDLE_VERSION = "analysis-input-v1"
+BUNDLE_VERSION_V1 = "analysis-input-v1"
+BUNDLE_VERSION_V2 = "analysis-input-v2"
+SUPPORTED_BUNDLE_VERSIONS = frozenset({BUNDLE_VERSION_V1, BUNDLE_VERSION_V2})
+# Backward-compatible alias for callers that explicitly build v1 bundles.
+BUNDLE_VERSION = BUNDLE_VERSION_V1
 
 
 @dataclass(frozen=True, slots=True)

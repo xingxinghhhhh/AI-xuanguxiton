@@ -34,6 +34,7 @@ from .decision.technical_price_plan import (
 )
 from .events.cninfo_announcements import CninfoAnnouncementConfig, CninfoAnnouncementSource
 from .evidence.analysis_input_bundle import AnalysisInputConfig, AnalysisInputSource
+from .evidence.contracts import BUNDLE_VERSION_V1, BUNDLE_VERSION_V2
 from .fundamentals.baostock_growth import BaostockGrowthConfig, BaostockGrowthSource
 from .fundamentals.baostock_profitability import (
     BaostockProfitabilityConfig,
@@ -178,6 +179,8 @@ def _build_parser() -> argparse.ArgumentParser:
     evidence.add_argument("--growth-report", type=Path, required=True)
     evidence.add_argument("--announcements-snapshot", type=Path, required=True)
     evidence.add_argument("--announcements-report", type=Path, required=True)
+    evidence.add_argument("--market-context-snapshot", type=Path)
+    evidence.add_argument("--market-context-report", type=Path)
     evidence.add_argument("--output-dir", type=Path, required=True)
 
     analysis = subparsers.add_parser(
@@ -715,12 +718,19 @@ def run_analysis_input(args: argparse.Namespace) -> int:
             growth_report=args.growth_report,
             announcements_snapshot=args.announcements_snapshot,
             announcements_report=args.announcements_report,
+            market_context_snapshot=args.market_context_snapshot,
+            market_context_report=args.market_context_report,
         )
         report = AnalysisInputSource(config).capture(args.output_dir)
     except Exception as exc:
         report = {
             "schema_version": "1.0",
-            "bundle_version": "analysis-input-v1",
+            "bundle_version": (
+                BUNDLE_VERSION_V2
+                if args.market_context_snapshot is not None
+                or args.market_context_report is not None
+                else BUNDLE_VERSION_V1
+            ),
             "source": "analysis-input-bundle",
             "symbol": args.symbol.strip().upper(),
             "as_of": args.as_of.isoformat(),

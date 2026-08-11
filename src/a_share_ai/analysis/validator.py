@@ -12,6 +12,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ..evidence.contracts import BUNDLE_VERSION_V2, SUPPORTED_BUNDLE_VERSIONS
 from ..market.replay import sha256_bytes, write_atomic
 from .contracts import (
     ALLOWED_CLAIM_KINDS,
@@ -112,7 +113,8 @@ def _validate_bundle(
     bundle_sha = sha256_bytes(bundle_raw)
     if bundle.get("schema_version") != "1.0":
         raise AnalysisValidationError("BUNDLE_VERSION_INVALID", "unsupported bundle schema_version")
-    if bundle.get("bundle_version") != "analysis-input-v1":
+    bundle_version = bundle.get("bundle_version")
+    if bundle_version not in SUPPORTED_BUNDLE_VERSIONS:
         raise AnalysisValidationError("BUNDLE_VERSION_INVALID", "unsupported bundle_version")
     if bundle.get("analysis_input_ready") is not True:
         raise AnalysisValidationError("BUNDLE_NOT_READY", "analysis input bundle is not ready")
@@ -131,7 +133,7 @@ def _validate_bundle(
     )
     if bundle_report.get("schema_version") != "1.0":
         raise AnalysisValidationError("BUNDLE_VERSION_INVALID", "input report schema_version is unsupported")
-    if bundle_report.get("bundle_version") != "analysis-input-v1":
+    if bundle_report.get("bundle_version") != bundle_version:
         raise AnalysisValidationError("BUNDLE_VERSION_INVALID", "input report bundle_version is unsupported")
     if bundle_report.get("bundle_sha256") != bundle_sha:
         raise AnalysisValidationError(
@@ -188,6 +190,13 @@ def _validate_bundle(
     if set(entries) != set(EVIDENCE_IDS):
         missing = sorted(set(EVIDENCE_IDS) - set(entries))
         raise AnalysisValidationError("EVIDENCE_MISSING", f"bundle is missing evidence: {', '.join(missing)}")
+    if bundle_version == BUNDLE_VERSION_V2:
+        market_summary = summaries.get("market")
+        context = market_summary.get("market_context") if isinstance(market_summary, dict) else None
+        if not isinstance(context, dict) or context.get("version") != "market-context-v1":
+            raise AnalysisValidationError(
+                "MARKET_CONTEXT_INVALID", "analysis-input-v2 must include a ready market context summary"
+            )
     return bundle, bundle_sha, entries, cutoff
 
 

@@ -217,6 +217,30 @@ calendar coverage, point-in-time boundaries, complete coverage for all three
 indexes, Decimal OHLCV values, and SHA-256 audit hashes. Any provider or data
 failure keeps `market_context_ready=false` and `decision_ready=false`.
 
+## Analysis input v2 with market context
+
+To include the fixed benchmark snapshot in the existing evidence bundle, pass
+both market-context files to `build-analysis-input`. This creates an explicit
+`analysis-input-v2` bundle; existing v1 bundles are never rewritten or upgraded
+implicitly.
+
+```bash
+python -m a_share_ai.cli build-analysis-input \
+  --symbol 600000.SH \
+  --as-of 2026-01-06T12:00:00+00:00 \
+  --input-root reports \
+  --market-context-snapshot reports/market-context-001/market_context_snapshot.json \
+  --market-context-report reports/market-context-001/market_context_report.json \
+  ...
+```
+
+The two paths are required as a pair. The v2 bundle keeps the same six evidence
+IDs and adds the snapshot/report references and SHA-256 values to the existing
+`market` evidence. It verifies the market-context version, readiness gate,
+calendar hash/version, exact `as_of`, fixed index set, record hashes and
+point-in-time dates. All analysis, quality, decision-input, and safety outputs
+continue to keep `decision_ready=false`.
+
 ## Render a readable research report
 
 After a successful `analyze-input` run, render the validated JSON and evidence

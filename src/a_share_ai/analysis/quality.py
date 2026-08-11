@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..evidence.contracts import BUNDLE_VERSION_V2, SUPPORTED_BUNDLE_VERSIONS
 from ..market.replay import sha256_bytes, write_atomic
 from .contracts import ANALYSIS_REPORT_VERSION, ANALYSIS_SECTIONS, EVIDENCE_IDS
 
@@ -152,6 +153,21 @@ def _audit_valid_inputs(
         analysis_report.get("input_bundle_sha256"),
         label="input bundle",
     )
+    bundle, _ = _read_json(bundle_path, label="input bundle")
+    bundle_version = bundle.get("bundle_version")
+    if bundle_version not in SUPPORTED_BUNDLE_VERSIONS:
+        raise AnalysisQualityError("BUNDLE_VERSION_INVALID", "unsupported input bundle version")
+    if bundle_version == BUNDLE_VERSION_V2:
+        summaries = bundle.get("summaries")
+        context = (
+            summaries.get("market", {}).get("market_context")
+            if isinstance(summaries, dict)
+            else None
+        )
+        if not isinstance(context, dict) or context.get("version") != "market-context-v1":
+            raise AnalysisQualityError(
+                "MARKET_CONTEXT_INVALID", "analysis-input-v2 must include market context"
+            )
     sections = analysis.get("sections")
     if not isinstance(sections, dict) or set(sections) != set(ANALYSIS_SECTIONS):
         raise AnalysisQualityError("SECTIONS_INVALID", "analysis must contain all sections")

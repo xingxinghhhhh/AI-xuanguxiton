@@ -10,10 +10,10 @@ from typing import Any
 
 from ..analysis.contracts import ANALYSIS_REPORT_VERSION, EVIDENCE_IDS
 from ..analysis.quality import ANALYSIS_QUALITY_VERSION
+from ..evidence.contracts import SUPPORTED_BUNDLE_VERSIONS
 from ..market.replay import sha256_bytes, write_atomic
 
 DECISION_INPUT_VERSION = "decision-input-v1"
-BUNDLE_VERSION = "analysis-input-v1"
 RENDER_SCHEMA_VERSION = "1.0"
 
 
@@ -220,9 +220,10 @@ def _validate_inputs(
         raise DecisionInputError("VERSION_INVALID", "analysis version is unsupported")
     if analysis_report.get("analysis_version") != ANALYSIS_REPORT_VERSION:
         raise DecisionInputError("VERSION_INVALID", "analysis report version is unsupported")
-    if bundle.get("bundle_version") != BUNDLE_VERSION:
+    bundle_version = bundle.get("bundle_version")
+    if bundle_version not in SUPPORTED_BUNDLE_VERSIONS:
         raise DecisionInputError("VERSION_INVALID", "input bundle version is unsupported")
-    if bundle_report.get("bundle_version") != BUNDLE_VERSION:
+    if bundle_report.get("bundle_version") != bundle_version:
         raise DecisionInputError("VERSION_INVALID", "input bundle report version is unsupported")
     if quality_report.get("analysis_quality_version") != ANALYSIS_QUALITY_VERSION:
         raise DecisionInputError("VERSION_INVALID", "quality report version is unsupported")

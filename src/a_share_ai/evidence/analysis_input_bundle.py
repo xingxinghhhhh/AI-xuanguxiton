@@ -15,9 +15,17 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from ..market.calendar import CalendarError, JsonTradingCalendarSource
+from ..market.market_context import (
+    INDEX_SYMBOLS,
+    MARKET_CONTEXT_VERSION,
+    MarketContextError,
+    MarketIndexRecord,
+)
 from ..market.replay import sha256_bytes, write_atomic
 from .contracts import (
-    BUNDLE_VERSION,
+    BUNDLE_VERSION_V1,
+    BUNDLE_VERSION_V2,
     SCHEMA_VERSION,
     AnalysisInputBundle,
     AnalysisInputReport,
@@ -60,6 +68,8 @@ class AnalysisInputConfig:
     growth_report: Path
     announcements_snapshot: Path
     announcements_report: Path
+    market_context_snapshot: Path | None = None
+    market_context_report: Path | None = None
 
     def __post_init__(self) -> None:
         symbol = self.symbol.strip().upper()
@@ -68,6 +78,10 @@ class AnalysisInputConfig:
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise BundleError("as_of must include a timezone")
         object.__setattr__(self, "symbol", symbol)
+        if (self.market_context_snapshot is None) != (self.market_context_report is None):
+            raise BundleError(
+                "market context snapshot and report must be provided together"
+            )
 
     @property
     def as_of_date(self) -> date:
@@ -75,7 +89,7 @@ class AnalysisInputConfig:
 
     @property
     def paths(self) -> dict[str, Path]:
-        return {
+        paths = {
             "market_bars": self.market_bars,
             "market_health_report": self.market_health_report,
             "coverage_report": self.coverage_report,
@@ -93,6 +107,14 @@ class AnalysisInputConfig:
             "announcements_snapshot": self.announcements_snapshot,
             "announcements_report": self.announcements_report,
         }
+        if self.market_context_snapshot is not None:
+            paths["market_context_snapshot"] = self.market_context_snapshot
+            paths["market_context_report"] = self.market_context_report
+        return paths
+
+    @property
+    def bundle_version(self) -> str:
+        return BUNDLE_VERSION_V2 if self.market_context_snapshot is not None else BUNDLE_VERSION_V1
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -266,6 +288,82 @@ class AnalysisInputSource:
     def name(self) -> str:
         return "analysis-input-bundle"
 
+    def _inspect_market_context(
+        self, *, calendar_sha: str
+    ) -> tuple[str, str, str, str, dict[str, Any]]:
+        cfg = self.config
+        if cfg.market_context_snapshot is None or cfg.market_context_report is None:
+            raise BundleError("market context paths are required for analysis-input-v2")
+        report, _ = _read_json(cfg.market_context_report)
+        snapshot, _ = _read_json(cfg.market_context_snapshot)
+        if report.get("market_context_version") != MARKET_CONTEXT_VERSION:
+            raise BundleError("market context version is unsupported")
+        if report.get("status") != "ready" or report.get("market_context_ready") is not True:
+            raise BundleError("market context is not ready")
+        if report.get("decision_ready") is not False:
+            raise BundleError("market context decision_ready must be false")
+        expected_as_of = cfg.as_of.isoformat()
+        if report.get("as_of") != expected_as_of or snapshot.get("as_of") != expected_as_of:
+            raise BundleError("market context as_of does not match the bundle cutoff")
+        if report.get("calendar_sha256") != calendar_sha:
+            raise BundleError("market context calendar SHA-256 does not match the bundle calendar")
+        try:
+            calendar = JsonTradingCalendarSource(cfg.calendar).load_calendar()
+        except CalendarError as exc:
+            raise BundleError(f"market context calendar is invalid: {exc}") from exc
+        if report.get("calendar_version") != calendar.calendar_version:
+            raise BundleError("market context calendar version does not match the bundle calendar")
+        snapshot_raw = cfg.market_context_snapshot.read_bytes()
+        snapshot_sha = sha256_bytes(snapshot_raw)
+        _check_hash(snapshot_sha, report.get("snapshot_sha256"), "market_context.snapshot_sha256")
+        if snapshot.get("market_context_version") != MARKET_CONTEXT_VERSION:
+            raise BundleError("market context snapshot version is unsupported")
+        if snapshot.get("calendar_version") != calendar.calendar_version:
+            raise BundleError("market context snapshot calendar version does not match")
+        request = snapshot.get("request")
+        if not isinstance(request, dict) or request.get("as_of") != expected_as_of:
+            raise BundleError("market context request as_of does not match the bundle cutoff")
+        raw_indexes = snapshot.get("indexes")
+        if not isinstance(raw_indexes, list) or not raw_indexes:
+            raise BundleError("market context indexes must be a non-empty list")
+        records: list[MarketIndexRecord] = []
+        try:
+            records = [MarketIndexRecord.from_mapping(item) for item in raw_indexes]
+        except (MarketContextError, TypeError) as exc:
+            raise BundleError(f"market context record is invalid: {exc}") from exc
+        by_symbol: dict[str, list[MarketIndexRecord]] = {symbol: [] for symbol in INDEX_SYMBOLS}
+        for record in records:
+            if record.symbol not in by_symbol:
+                raise BundleError("market context contains an unsupported index")
+            if record.trade_date > cfg.as_of_date:
+                raise BundleError("market context contains future trade data")
+            by_symbol[record.symbol].append(record)
+        report_index_symbols = report.get("index_symbols")
+        if report_index_symbols != list(INDEX_SYMBOLS):
+            raise BundleError("market context fixed index list is invalid")
+        index_reports = report.get("index_reports")
+        if not isinstance(index_reports, dict):
+            raise BundleError("market context index reports are invalid")
+        for symbol in INDEX_SYMBOLS:
+            rows = by_symbol[symbol]
+            details = index_reports.get(symbol)
+            if not rows or not isinstance(details, dict) or details.get("status") != "ready":
+                raise BundleError(f"market context index is incomplete: {symbol}")
+            if details.get("record_count") != len(rows):
+                raise BundleError(f"market context record count mismatch: {symbol}")
+            if len({record.trade_date for record in rows}) != len(rows):
+                raise BundleError(f"market context contains duplicate dates: {symbol}")
+        report_rel, report_sha = _hash_path(cfg.market_context_report, cfg.input_root)
+        snapshot_rel, snapshot_sha = _hash_path(cfg.market_context_snapshot, cfg.input_root)
+        return report_rel, report_sha, snapshot_rel, snapshot_sha, {
+            "status": report.get("status"),
+            "version": MARKET_CONTEXT_VERSION,
+            "index_symbols": list(INDEX_SYMBOLS),
+            "record_count": len(records),
+            "start": report.get("start"),
+            "end": report.get("end"),
+        }
+
     def _inspect_market(self) -> _Inspection:
         cfg = self.config
         health, health_raw = _read_json(cfg.market_health_report)
@@ -301,28 +399,41 @@ class AnalysisInputSource:
         report_rel, report_sha = _hash_path(cfg.market_health_report, cfg.input_root)
         coverage_rel, coverage_sha = _hash_path(cfg.coverage_report, cfg.input_root)
         bars_rel, bars_sha = _hash_path(cfg.market_bars, cfg.input_root)
+        artifact_paths = [coverage_rel, bars_rel, calendar_relative]
+        artifact_sha256 = [coverage_sha, bars_sha, calendar_sha]
+        summary: dict[str, Any] = {
+            "status": "connected/complete",
+            "first_trade_date": health.get("first_trade_date"),
+            "last_trade_date": health.get("last_trade_date"),
+            "bar_count": health.get("bar_count"),
+            "coverage_status": coverage.get("status"),
+        }
+        source = "jsonl-replay+json-calendar"
+        if cfg.market_context_snapshot is not None:
+            (
+                context_report_rel,
+                context_report_sha,
+                context_snapshot_rel,
+                context_snapshot_sha,
+                context_summary,
+            ) = self._inspect_market_context(calendar_sha=calendar_sha)
+            artifact_paths.extend((context_snapshot_rel, context_report_rel))
+            artifact_sha256.extend((context_snapshot_sha, context_report_sha))
+            summary["market_context"] = context_summary
+            source += "+market-context-v1"
         entry = EvidenceEntry(
             name="market",
             report_path=report_rel,
             report_sha256=report_sha,
-            artifact_paths=(coverage_rel, bars_rel, calendar_relative),
-            artifact_sha256=(coverage_sha, bars_sha, calendar_sha),
-            source="jsonl-replay+json-calendar",
+            artifact_paths=tuple(artifact_paths),
+            artifact_sha256=tuple(artifact_sha256),
+            source=source,
             symbol=cfg.symbol,
             as_of=str(health["as_of"]),
             status="connected/complete",
             ready=True,
         )
-        return _Inspection(
-            entry,
-            {
-                "status": "connected/complete",
-                "first_trade_date": health.get("first_trade_date"),
-                "last_trade_date": health.get("last_trade_date"),
-                "bar_count": health.get("bar_count"),
-                "coverage_status": coverage.get("status"),
-            },
-        )
+        return _Inspection(entry, summary)
 
     def _inspect_technical(self) -> _Inspection:
         cfg = self.config
@@ -540,7 +651,7 @@ class AnalysisInputSource:
                 raise BundleError("one or more upstream evidence entries are not ready")
             bundle = AnalysisInputBundle(
                 schema_version=SCHEMA_VERSION,
-                bundle_version=BUNDLE_VERSION,
+                bundle_version=cfg.bundle_version,
                 source=self.name,
                 symbol=cfg.symbol,
                 as_of=cfg.as_of.isoformat(),
@@ -552,7 +663,7 @@ class AnalysisInputSource:
             )
             return bundle, AnalysisInputReport(
                 schema_version=SCHEMA_VERSION,
-                bundle_version=BUNDLE_VERSION,
+                bundle_version=cfg.bundle_version,
                 source=self.name,
                 symbol=cfg.symbol,
                 as_of=cfg.as_of.isoformat(),
@@ -565,7 +676,7 @@ class AnalysisInputSource:
         except BundleError as exc:
             bundle = AnalysisInputBundle(
                 schema_version=SCHEMA_VERSION,
-                bundle_version=BUNDLE_VERSION,
+                bundle_version=cfg.bundle_version,
                 source=self.name,
                 symbol=cfg.symbol,
                 as_of=cfg.as_of.isoformat(),
@@ -577,7 +688,7 @@ class AnalysisInputSource:
             )
             return bundle, AnalysisInputReport(
                 schema_version=SCHEMA_VERSION,
-                bundle_version=BUNDLE_VERSION,
+                bundle_version=cfg.bundle_version,
                 source=self.name,
                 symbol=cfg.symbol,
                 as_of=cfg.as_of.isoformat(),

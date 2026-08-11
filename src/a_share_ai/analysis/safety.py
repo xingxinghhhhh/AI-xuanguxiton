@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
+from ..evidence.contracts import SUPPORTED_BUNDLE_VERSIONS
 from ..market.replay import sha256_bytes, write_atomic
 from .contracts import ANALYSIS_REPORT_VERSION, ANALYSIS_SECTIONS
 
@@ -269,8 +270,10 @@ def _validate_input_chain(
     _require(analysis_report, "analysis_version", ANALYSIS_REPORT_VERSION, label="analysis_report")
     _require(bundle, "analysis_input_ready", True, label="input_bundle")
     _require(bundle_report, "analysis_input_ready", True, label="input_bundle_report")
-    _require(bundle, "bundle_version", "analysis-input-v1", label="input_bundle")
-    _require(bundle_report, "bundle_version", "analysis-input-v1", label="input_bundle_report")
+    bundle_version = bundle.get("bundle_version")
+    if bundle_version not in SUPPORTED_BUNDLE_VERSIONS:
+        raise AnalysisSafetyError("VERSION_INVALID", "input bundle version is unsupported")
+    _require(bundle_report, "bundle_version", bundle_version, label="input_bundle_report")
     _require(
         quality_report,
         "analysis_quality_version",
