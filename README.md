@@ -279,3 +279,24 @@ chain and reports stable rule IDs and locations for forbidden actions, prices,
 positions, recommendations, unexpected decision fields, and Markdown/HTML/link
 or code-fence bypasses. `safety_ready=true` is independent of
 `decision_input_ready` and never changes `decision_ready=false`.
+
+## Manual analysis review packet
+
+After the safety gate passes, create a deterministic, pending-only checklist
+for human review:
+
+```bash
+python -m a_share_ai.cli build-analysis-review \
+  --decision-input reports/analysis-deepseek-001/decision-input/decision_input_snapshot.json \
+  --decision-input-report reports/analysis-deepseek-001/decision-input/decision_input_report.json \
+  --safety-report reports/analysis-deepseek-001/safety/analysis_safety_report.json \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/review
+```
+
+This writes `analysis_review_packet.json` and
+`analysis_review_report.json`. Each claim appears once with its evidence paths
+and SHA-256 values, `review_status=pending`, `review_complete=false`, and
+`decision_ready=false`. It does not write or accept human review decisions.
