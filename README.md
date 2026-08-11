@@ -347,3 +347,29 @@ symbol/cutoff mismatches, path escapes, future cutoffs, and upstream failures.
 `research_release_ready=true` means the research package is internally
 consistent and ready to read; it never changes `decision_ready=false` and is
 not trade authorization.
+
+## Compare two research releases
+
+To inspect what changed between two completed single-stock research packages,
+run the literal structural diff audit:
+
+```bash
+python -m a_share_ai.cli compare-research-releases \
+  --previous-manifest reports/previous/release/research_release_manifest.json \
+  --previous-report reports/previous/release/research_release_report.json \
+  --current-manifest reports/current/release/research_release_manifest.json \
+  --current-report reports/current/release/research_release_report.json \
+  --previous-artifact-root reports/previous \
+  --current-artifact-root reports/current \
+  --output-dir reports/current/release-diff
+```
+
+This writes `research_release_diff.json` and
+`research_release_diff_report.json` using
+`research-release-diff-v1`. Claim IDs are classified as unchanged, added,
+removed, or changed; changed claims report only literal differences in kind,
+text, citation IDs, or observed dates. Evidence, artifact, risk, and unknown
+changes are reported separately. The command rejects time reversal, symbol or
+SHA mismatches, path escapes, incomplete reviews, unverified evidence, and
+transaction fields. It never performs semantic good/bad analysis and always
+keeps `decision_ready=false`.

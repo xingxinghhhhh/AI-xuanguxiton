@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .analysis.contracts import AnalysisReportConfig
 from .analysis.quality import audit_analysis_quality
+from .analysis.release_diff import compare_research_releases
 from .analysis.renderer import render_analysis
 from .analysis.research_release import build_research_release
 from .analysis.review import build_analysis_review
@@ -252,6 +253,17 @@ def _build_parser() -> argparse.ArgumentParser:
     release.add_argument("--analysis-review-result-report", type=Path, required=True)
     release.add_argument("--artifact-root", type=Path, required=True)
     release.add_argument("--output-dir", type=Path, required=True)
+
+    release_diff = subparsers.add_parser(
+        "compare-research-releases", help="compare two reviewed research releases"
+    )
+    release_diff.add_argument("--previous-manifest", type=Path, required=True)
+    release_diff.add_argument("--previous-report", type=Path, required=True)
+    release_diff.add_argument("--current-manifest", type=Path, required=True)
+    release_diff.add_argument("--current-report", type=Path, required=True)
+    release_diff.add_argument("--previous-artifact-root", type=Path, required=True)
+    release_diff.add_argument("--current-artifact-root", type=Path, required=True)
+    release_diff.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -753,6 +765,20 @@ def run_research_release(args: argparse.Namespace) -> int:
     return 0 if report.get("research_release_ready") is True else 1
 
 
+def run_release_diff(args: argparse.Namespace) -> int:
+    report = compare_research_releases(
+        previous_manifest_path=args.previous_manifest,
+        previous_report_path=args.previous_report,
+        current_manifest_path=args.current_manifest,
+        current_report_path=args.current_report,
+        previous_artifact_root=args.previous_artifact_root,
+        current_artifact_root=args.current_artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("comparison_ready") is True else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -792,6 +818,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_apply_analysis_review(args)
     if args.command == "build-research-release":
         return run_research_release(args)
+    if args.command == "compare-research-releases":
+        return run_release_diff(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

@@ -17,6 +17,11 @@ from .deepseek_provider import (
 from .offline_provider import AnalysisProvider, OfflineAnalysisProvider, ProviderError
 from .quality import ANALYSIS_QUALITY_VERSION, AnalysisQualityError, audit_analysis_quality
 from .real_provider import OpenAIAnalysisProvider, ProviderTransportError, UrllibResponseTransport
+from .release_diff import (
+    RESEARCH_RELEASE_DIFF_VERSION,
+    ResearchReleaseDiffError,
+    compare_research_releases,
+)
 from .renderer import AnalysisRenderError, render_analysis
 from .request_builder import (
     RequestBuildError,
@@ -94,4 +99,7 @@ __all__ = [
     "RESEARCH_RELEASE_VERSION",
     "ResearchReleaseError",
     "build_research_release",
+    "RESEARCH_RELEASE_DIFF_VERSION",
+    "ResearchReleaseDiffError",
+    "compare_research_releases",
 ]
