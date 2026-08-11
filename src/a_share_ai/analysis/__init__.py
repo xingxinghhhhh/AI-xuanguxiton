@@ -16,6 +16,7 @@ from .deepseek_provider import (
 )
 from .offline_provider import AnalysisProvider, OfflineAnalysisProvider, ProviderError
 from .real_provider import OpenAIAnalysisProvider, ProviderTransportError, UrllibResponseTransport
+from .renderer import AnalysisRenderError, render_analysis
 from .request_builder import (
     RequestBuildError,
     build_analysis_context,
@@ -42,6 +43,7 @@ __all__ = [
     "AnalysisClaim",
     "AnalysisReportConfig",
     "AnalysisReportSource",
+    "AnalysisRenderError",
     "AnalysisValidationError",
     "DeepSeekAnalysisProvider",
     "DeepSeekTransportError",
@@ -63,4 +65,5 @@ __all__ = [
     "build_openai_request",
     "build_deepseek_request",
     "provider_output_schema",
+    "render_analysis",
 ]

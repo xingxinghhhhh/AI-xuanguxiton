@@ -193,3 +193,21 @@ python -m a_share_ai.cli analyze-input \
 The DeepSeek request contains no local paths, hashes, original files, or API
 key. It writes the same audit artifacts as the OpenAI provider and never falls
 back or retries.
+
+## Render a readable research report
+
+After a successful `analyze-input` run, render the validated JSON and evidence
+citations as deterministic Markdown without another API call:
+
+```bash
+python -m a_share_ai.cli render-analysis \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --input-root reports \
+  --output-dir reports/analysis-deepseek-001/rendered
+```
+
+This writes `research_analysis.md` and `analysis_render_report.json`. It checks
+the analysis SHA, evidence paths and hashes, escapes model text for Markdown,
+and refuses reports that are not analysis-ready or that set `decision_ready` to
+true.
