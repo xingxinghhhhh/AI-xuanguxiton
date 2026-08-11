@@ -476,6 +476,27 @@ symbol/cutoff mismatches, path escapes, future cutoffs, and upstream failures.
 consistent and ready to read; it never changes `decision_ready=false` and is
 not trade authorization.
 
+## Market-aware review-to-release replay
+
+For the `analysis-input-v2` market-aware chain, the review and release steps
+can be replayed together after a human supplies an explicit submission:
+
+```bash
+python -m a_share_ai.cli replay-market-aware-release \
+  --packet reports/analysis-deepseek-001/review/analysis_review_packet.json \
+  --packet-report reports/analysis-deepseek-001/review/analysis_review_report.json \
+  --submission reports/analysis-deepseek-001/review/review_submission.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/release-replay
+```
+
+The command only consumes `review_submission.json`; it never generates or
+modifies a human decision. It requires the market context and relative
+strength summaries, records both stage reports and hashes, and stops before
+release when the submission is invalid or not fully `confirmed`. A successful
+replay writes the existing review result and research release artifacts plus
+`market_aware_release_replay_report.json`; `decision_ready` remains `false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,

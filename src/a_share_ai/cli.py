@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .analysis.contracts import AnalysisReportConfig
+from .analysis.market_aware_release_replay import replay_market_aware_release
 from .analysis.market_aware_replay import replay_market_aware_analysis
 from .analysis.market_aware_smoke import smoke_market_aware_analysis
 from .analysis.quality import audit_analysis_quality
@@ -220,6 +221,16 @@ def _build_parser() -> argparse.ArgumentParser:
     market_aware_smoke.add_argument("--model", default="deepseek-v4-flash")
     market_aware_smoke.add_argument("--timeout-seconds", type=float, default=60.0)
     market_aware_smoke.add_argument("--output-dir", type=Path, required=True)
+
+    market_aware_release = subparsers.add_parser(
+        "replay-market-aware-release",
+        help="replay an explicit market-aware human review submission to release",
+    )
+    market_aware_release.add_argument("--packet", type=Path, required=True)
+    market_aware_release.add_argument("--packet-report", type=Path, required=True)
+    market_aware_release.add_argument("--submission", type=Path, required=True)
+    market_aware_release.add_argument("--artifact-root", type=Path, required=True)
+    market_aware_release.add_argument("--output-dir", type=Path, required=True)
 
     renderer = subparsers.add_parser(
         "render-analysis", help="render a validated analysis report as Markdown"
@@ -825,6 +836,18 @@ def run_market_aware_smoke(args: argparse.Namespace) -> int:
     return 0 if report.get("review_packet_ready") is True else 1
 
 
+def run_market_aware_release(args: argparse.Namespace) -> int:
+    report = replay_market_aware_release(
+        packet_path=args.packet,
+        packet_report_path=args.packet_report,
+        submission_path=args.submission,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("research_release_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -976,6 +999,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_market_aware_replay(args)
     if args.command == "market-aware-smoke":
         return run_market_aware_smoke(args)
+    if args.command == "replay-market-aware-release":
+        return run_market_aware_release(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":

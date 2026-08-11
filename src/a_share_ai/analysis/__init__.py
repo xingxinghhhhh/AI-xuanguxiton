@@ -14,6 +14,11 @@ from .deepseek_provider import (
     DeepSeekTransportError,
     UrllibDeepSeekTransport,
 )
+from .market_aware_release_replay import (
+    MARKET_AWARE_RELEASE_REPLAY_VERSION,
+    MarketAwareReleaseReplayError,
+    replay_market_aware_release,
+)
 from .market_aware_replay import (
     MARKET_AWARE_REPLAY_VERSION,
     MarketAwareReplayError,
@@ -108,6 +113,9 @@ __all__ = [
     "MARKET_AWARE_REPLAY_VERSION",
     "MarketAwareReplayError",
     "replay_market_aware_analysis",
+    "MARKET_AWARE_RELEASE_REPLAY_VERSION",
+    "MarketAwareReleaseReplayError",
+    "replay_market_aware_release",
     "MARKET_AWARE_SMOKE_VERSION",
     "smoke_market_aware_analysis",
     "audit_analysis_safety",
