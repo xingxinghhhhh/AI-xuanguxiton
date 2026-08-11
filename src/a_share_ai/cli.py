@@ -11,6 +11,7 @@ from pathlib import Path
 from .analysis.contracts import AnalysisReportConfig
 from .analysis.quality import audit_analysis_quality
 from .analysis.renderer import render_analysis
+from .analysis.research_release import build_research_release
 from .analysis.review import build_analysis_review
 from .analysis.review_record import apply_analysis_review
 from .analysis.safety import audit_analysis_safety
@@ -239,6 +240,18 @@ def _build_parser() -> argparse.ArgumentParser:
     review_record.add_argument("--packet-report", type=Path, required=True)
     review_record.add_argument("--submission", type=Path, required=True)
     review_record.add_argument("--output-dir", type=Path, required=True)
+
+    release = subparsers.add_parser(
+        "build-research-release", help="build a reviewed research release manifest"
+    )
+    release.add_argument("--decision-input", type=Path, required=True)
+    release.add_argument("--decision-input-report", type=Path, required=True)
+    release.add_argument("--safety-report", type=Path, required=True)
+    release.add_argument("--analysis-review-packet", type=Path, required=True)
+    release.add_argument("--analysis-review-result", type=Path, required=True)
+    release.add_argument("--analysis-review-result-report", type=Path, required=True)
+    release.add_argument("--artifact-root", type=Path, required=True)
+    release.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -725,6 +738,21 @@ def run_apply_analysis_review(args: argparse.Namespace) -> int:
     return 0 if report.get("status") == "ready" else 1
 
 
+def run_research_release(args: argparse.Namespace) -> int:
+    report = build_research_release(
+        decision_input_path=args.decision_input,
+        decision_input_report_path=args.decision_input_report,
+        safety_report_path=args.safety_report,
+        review_packet_path=args.analysis_review_packet,
+        review_result_path=args.analysis_review_result,
+        review_result_report_path=args.analysis_review_result_report,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("research_release_ready") is True else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -762,6 +790,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_analysis_review(args)
     if args.command == "apply-analysis-review":
         return run_apply_analysis_review(args)
+    if args.command == "build-research-release":
+        return run_research_release(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

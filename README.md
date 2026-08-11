@@ -320,3 +320,30 @@ two require notes and every `reviewed_at` timestamp must include a timezone.
 Unknown, duplicate, missing, extra, or transaction-related fields fail closed.
 The result records `review_complete` and `review_gate_pass`, but always keeps
 `decision_ready=false`; a passed review gate is not trade authorization.
+
+## Research release manifest
+
+After the safety audit and a complete all-confirmed human review, build a
+single-stock release manifest for downstream readers or a future decision
+module:
+
+```bash
+python -m a_share_ai.cli build-research-release \
+  --decision-input reports/analysis-deepseek-001/decision-input/decision_input_snapshot.json \
+  --decision-input-report reports/analysis-deepseek-001/decision-input/decision_input_report.json \
+  --safety-report reports/analysis-deepseek-001/safety/analysis_safety_report.json \
+  --analysis-review-packet reports/analysis-deepseek-001/review/analysis_review_packet.json \
+  --analysis-review-result reports/analysis-deepseek-001/review-result/analysis_review_result.json \
+  --analysis-review-result-report reports/analysis-deepseek-001/review-result/analysis_review_result_report.json \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/release
+```
+
+This writes `research_release_manifest.json` and
+`research_release_report.json`. The `research-release-v1` manifest contains
+only controlled relative paths, versions, statuses, and SHA-256 values for the
+six upstream artifacts. It blocks challenged/follow-up reviews, hash or
+symbol/cutoff mismatches, path escapes, future cutoffs, and upstream failures.
+`research_release_ready=true` means the research package is internally
+consistent and ready to read; it never changes `decision_ready=false` and is
+not trade authorization.

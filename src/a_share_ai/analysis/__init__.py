@@ -25,6 +25,11 @@ from .request_builder import (
     build_openai_request,
     provider_output_schema,
 )
+from .research_release import (
+    RESEARCH_RELEASE_VERSION,
+    ResearchReleaseError,
+    build_research_release,
+)
 from .review import ANALYSIS_REVIEW_VERSION, AnalysisReviewError, build_analysis_review
 from .review_record import (
     ANALYSIS_REVIEW_RECORD_VERSION,
@@ -86,4 +91,7 @@ __all__ = [
     "ANALYSIS_REVIEW_RECORD_VERSION",
     "AnalysisReviewRecordError",
     "apply_analysis_review",
+    "RESEARCH_RELEASE_VERSION",
+    "ResearchReleaseError",
+    "build_research_release",
 ]
