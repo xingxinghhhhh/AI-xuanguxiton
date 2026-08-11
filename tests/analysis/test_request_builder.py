@@ -2,6 +2,7 @@ import json
 
 from a_share_ai.analysis.request_builder import (
     build_analysis_context,
+    build_deepseek_request,
     build_openai_request,
     provider_output_schema,
     request_sha256,
@@ -67,3 +68,21 @@ def test_openai_request_is_structured_and_hash_is_stable() -> None:
         "risks",
         "unknowns",
     }
+
+
+def test_deepseek_request_uses_json_mode_without_responses_schema() -> None:
+    bundle, entries = _bundle_and_entries()
+
+    request = build_deepseek_request(bundle, entries, model="deepseek-v4-flash")
+    serialized = json.dumps(request, ensure_ascii=False)
+
+    assert request["model"] == "deepseek-v4-flash"
+    assert request["response_format"] == {"type": "json_object"}
+    assert request["stream"] is False
+    assert "json_schema" not in serialized
+    assert "report_path" not in serialized
+    assert "C:/private" not in serialized
+    assert "JSON example" in request["messages"][0]["content"]
+    assert "claim_id" in request["messages"][0]["content"]
+    assert "citation_ids" in request["messages"][0]["content"]
+    assert '"description":' not in request["messages"][0]["content"]

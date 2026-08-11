@@ -163,3 +163,33 @@ The command writes `ai_request.json`, `ai_response.json`,
 response SHA-256 values, provider status, model, and timestamps are recorded;
 the API key is never written to those files or CLI output. Ordinary tests use a
 fake transport and remain offline.
+
+## Explicit DeepSeek research provider
+
+DeepSeek is also opt-in and single-request only. It uses the official Chat
+Completions JSON mode rather than the OpenAI Responses API schema. The returned
+JSON is still passed through the same local `analysis-report-v1` validator, so
+invalid fields, citations, dates, or trading instructions fail closed.
+
+Configure the key locally in the ignored `.env.local` file:
+
+```env
+DEEPSEEK_API_KEY=your_key_here
+```
+
+Run it explicitly with the default `deepseek-v4-flash` model:
+
+```bash
+python -m a_share_ai.cli analyze-input \
+  --provider deepseek \
+  --model deepseek-v4-flash \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --env-file .env.local \
+  --output-dir reports/analysis-deepseek-001
+```
+
+The DeepSeek request contains no local paths, hashes, original files, or API
+key. It writes the same audit artifacts as the OpenAI provider and never falls
+back or retries.

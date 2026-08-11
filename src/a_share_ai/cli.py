@@ -165,10 +165,10 @@ def _build_parser() -> argparse.ArgumentParser:
     analysis.add_argument("--bundle-report", type=Path)
     analysis.add_argument("--input-root", type=Path, required=True)
     analysis.add_argument(
-        "--provider", choices=("offline", "openai"), default="offline"
+        "--provider", choices=("offline", "openai", "deepseek"), default="offline"
     )
     analysis.add_argument("--response-fixture", type=Path)
-    analysis.add_argument("--model", default="gpt-5.6-luna")
+    analysis.add_argument("--model")
     analysis.add_argument("--timeout-seconds", type=float, default=60.0)
     analysis.add_argument("--env-file", type=Path)
     analysis.add_argument("--output-dir", type=Path, required=True)
@@ -559,6 +559,8 @@ def run_analysis_report(args: argparse.Namespace) -> int:
         raise SystemExit("analyze-input --provider offline requires --response-fixture")
     if args.provider == "openai" and args.response_fixture is not None:
         raise SystemExit("analyze-input --provider openai does not accept --response-fixture")
+    if args.provider == "deepseek" and args.response_fixture is not None:
+        raise SystemExit("analyze-input --provider deepseek does not accept --response-fixture")
     if args.timeout_seconds <= 0:
         raise SystemExit("analyze-input --timeout-seconds must be positive")
     config = AnalysisReportConfig(
@@ -568,7 +570,8 @@ def run_analysis_report(args: argparse.Namespace) -> int:
         response_fixture=args.response_fixture,
         output_dir=args.output_dir,
         provider=args.provider,
-        model=args.model,
+        model=args.model
+        or ("deepseek-v4-flash" if args.provider == "deepseek" else "gpt-5.6-luna"),
         timeout_seconds=args.timeout_seconds,
         env_file=args.env_file,
     )

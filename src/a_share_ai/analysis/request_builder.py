@@ -1,4 +1,4 @@
-"""Build a redacted, deterministic request for the OpenAI Responses API."""
+"""Build redacted, deterministic requests for supported analysis providers."""
 
 from __future__ import annotations
 
@@ -25,6 +25,20 @@ evidence IDs. Use kind=unknown when the supplied evidence is insufficient.
 Do not produce BUY, SELL, HOLD, 买入, 卖出, 观望, entry prices, stop loss, take
 profit, position sizing, orders, or any other executable trading instruction.
 The local program will expand citation paths and hashes after validation.
+"""
+
+DEEPSEEK_SYSTEM_PROMPT = """You are a read-only A-share research analyst.
+Use only the structured evidence supplied in the user message. Do not add external
+facts, search the web, infer missing announcement content, or invent dates.
+Return one valid JSON object and no Markdown. Every claim must cite one or more
+supplied evidence IDs. Use kind=unknown when the supplied evidence is insufficient.
+Do not produce BUY, SELL, HOLD, 涔板叆, 鍗栧嚭, 瑙傛湜, entry prices, stop loss, take
+profit, position sizing, orders, or any other executable trading instruction.
+The required JSON shape is shown in the system message example; keep all keys and
+all eight section names exactly as shown. The local program will validate every
+field and expand citation paths and hashes after validation. Every claim object
+must use exactly these keys: claim_id, kind, text, citation_ids, observed_dates.
+Do not use citations, description, summary, or any other claim keys.
 """
 
 
@@ -159,6 +173,46 @@ def build_openai_request(
                 "schema": provider_output_schema(),
             }
         },
+    }
+
+
+def build_deepseek_request(
+    bundle: Mapping[str, Any], entries: Mapping[str, Any], *, model: str
+) -> dict[str, Any]:
+    """Build a DeepSeek Chat Completions JSON-mode request without local metadata."""
+
+    context = build_analysis_context(bundle, entries)
+    example = {
+        "schema_version": ANALYSIS_REPORT_SCHEMA_VERSION,
+        "analysis_version": ANALYSIS_REPORT_VERSION,
+        "symbol": context["symbol"],
+        "as_of": context["as_of"],
+        "sections": {section: [] for section in ANALYSIS_SECTIONS},
+    }
+    example["sections"]["unknowns"] = [
+        {
+            "claim_id": "unknown_evidence",
+            "kind": "unknown",
+            "text": "The supplied evidence is insufficient for this claim.",
+            "citation_ids": ["market"],
+            "observed_dates": [],
+        }
+    ]
+    system_prompt = (
+        f"{DEEPSEEK_SYSTEM_PROMPT}\nJSON example:\n"
+        f"{json.dumps(example, ensure_ascii=False, sort_keys=True)}"
+    )
+    return {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": json.dumps(context, ensure_ascii=False, sort_keys=True),
+            },
+        ],
+        "response_format": {"type": "json_object"},
+        "stream": False,
     }
 
 

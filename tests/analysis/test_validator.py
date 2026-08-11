@@ -245,3 +245,53 @@ def test_cli_openai_provider_is_explicit_and_uses_fake_provider(
     report = json.loads(capsys.readouterr().out)
     assert report["provider"] == "openai"
     assert report["model"] == "test-model"
+
+
+def test_cli_deepseek_provider_is_explicit_and_uses_fake_provider(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _build_config(tmp_path, FIXTURE_ROOT / "valid_provider.json")
+
+    class FakeDeepSeekProvider:
+        def __init__(self, **kwargs: Any) -> None:
+            assert kwargs["model"] == "test-model"
+
+        def load(self, *, bundle: dict[str, Any], entries: dict[str, Any]) -> dict[str, Any]:
+            del bundle, entries
+            return json.loads((FIXTURE_ROOT / "valid_provider.json").read_text(encoding="utf-8"))
+
+        def audit_metadata(self) -> dict[str, Any]:
+            return {
+                "provider": "deepseek",
+                "model": "test-model",
+                "provider_status": "ready",
+            }
+
+        def write_audit_files(self, output_dir: Path) -> None:
+            del output_dir
+
+    monkeypatch.setattr(
+        "a_share_ai.analysis.validator.DeepSeekAnalysisProvider", FakeDeepSeekProvider
+    )
+    exit_code = main(
+        [
+            "analyze-input",
+            "--provider",
+            "deepseek",
+            "--model",
+            "test-model",
+            "--bundle",
+            str(config.bundle_path),
+            "--input-root",
+            str(config.input_root),
+            "--output-dir",
+            str(config.output_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["provider"] == "deepseek"
+    assert report["model"] == "test-model"

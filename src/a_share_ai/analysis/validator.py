@@ -23,6 +23,7 @@ from .contracts import (
     AnalysisReportConfig,
     EvidenceCitation,
 )
+from .deepseek_provider import DeepSeekAnalysisProvider
 from .offline_provider import OfflineAnalysisProvider, ProviderError
 from .real_provider import OpenAIAnalysisProvider
 
@@ -336,11 +337,19 @@ class AnalysisReportSource:
                 timeout_seconds=self.config.timeout_seconds,
                 env_file=self.config.env_file,
             )
+        if self.config.provider == "deepseek":
+            return DeepSeekAnalysisProvider(
+                model=self.config.model,
+                timeout_seconds=self.config.timeout_seconds,
+                env_file=self.config.env_file,
+            )
         raise ProviderError(f"unsupported analysis provider: {self.config.provider}")
 
     def _audit_fields(self, provider: Any | None) -> dict[str, Any]:
         fields: dict[str, Any] = {
-            "model": self.config.model if self.config.provider == "openai" else None,
+            "model": self.config.model
+            if self.config.provider in {"openai", "deepseek"}
+            else None,
             "provider": self.config.provider,
         }
         if provider is not None and hasattr(provider, "audit_metadata"):

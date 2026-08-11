@@ -9,11 +9,17 @@ from .contracts import (
     AnalysisClaim,
     AnalysisReportConfig,
 )
+from .deepseek_provider import (
+    DeepSeekAnalysisProvider,
+    DeepSeekTransportError,
+    UrllibDeepSeekTransport,
+)
 from .offline_provider import AnalysisProvider, OfflineAnalysisProvider, ProviderError
 from .real_provider import OpenAIAnalysisProvider, ProviderTransportError, UrllibResponseTransport
 from .request_builder import (
     RequestBuildError,
     build_analysis_context,
+    build_deepseek_request,
     build_openai_request,
     provider_output_schema,
 )
@@ -37,6 +43,8 @@ __all__ = [
     "AnalysisReportConfig",
     "AnalysisReportSource",
     "AnalysisValidationError",
+    "DeepSeekAnalysisProvider",
+    "DeepSeekTransportError",
     "INDICATOR_VERSION",
     "OfflineAnalysisProvider",
     "OpenAIAnalysisProvider",
@@ -44,6 +52,7 @@ __all__ = [
     "ProviderTransportError",
     "RequestBuildError",
     "UrllibResponseTransport",
+    "UrllibDeepSeekTransport",
     "EVIDENCE_IDS",
     "TechnicalFeatureReport",
     "TechnicalFeatureSnapshot",
@@ -52,5 +61,6 @@ __all__ = [
     "serialize_feature_snapshots",
     "build_analysis_context",
     "build_openai_request",
+    "build_deepseek_request",
     "provider_output_schema",
 ]
