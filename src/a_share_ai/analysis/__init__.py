@@ -26,6 +26,11 @@ from .request_builder import (
     provider_output_schema,
 )
 from .review import ANALYSIS_REVIEW_VERSION, AnalysisReviewError, build_analysis_review
+from .review_record import (
+    ANALYSIS_REVIEW_RECORD_VERSION,
+    AnalysisReviewRecordError,
+    apply_analysis_review,
+)
 from .safety import ANALYSIS_SAFETY_VERSION, AnalysisSafetyError, audit_analysis_safety
 from .technical_features import (
     INDICATOR_VERSION,
@@ -78,4 +83,7 @@ __all__ = [
     "audit_analysis_quality",
     "audit_analysis_safety",
     "build_analysis_review",
+    "ANALYSIS_REVIEW_RECORD_VERSION",
+    "AnalysisReviewRecordError",
+    "apply_analysis_review",
 ]

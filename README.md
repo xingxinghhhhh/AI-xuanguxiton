@@ -300,3 +300,23 @@ This writes `analysis_review_packet.json` and
 `analysis_review_report.json`. Each claim appears once with its evidence paths
 and SHA-256 values, `review_status=pending`, `review_complete=false`, and
 `decision_ready=false`. It does not write or accept human review decisions.
+
+## Human review record
+
+Submit a complete JSON record after a human has checked each claim and its
+evidence mapping:
+
+```bash
+python -m a_share_ai.cli apply-analysis-review \
+  --packet reports/analysis-deepseek-001/review/analysis_review_packet.json \
+  --packet-report reports/analysis-deepseek-001/review/analysis_review_report.json \
+  --submission reports/analysis-deepseek-001/review/review_submission.json \
+  --output-dir reports/analysis-deepseek-001/review-result
+```
+
+The submission contains the packet SHA-256 and one item per `review_id`.
+Allowed statuses are `confirmed`, `challenged`, and `follow_up`; the latter
+two require notes and every `reviewed_at` timestamp must include a timezone.
+Unknown, duplicate, missing, extra, or transaction-related fields fail closed.
+The result records `review_complete` and `review_gate_pass`, but always keeps
+`decision_ready=false`; a passed review gate is not trade authorization.

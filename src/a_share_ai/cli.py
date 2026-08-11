@@ -12,6 +12,7 @@ from .analysis.contracts import AnalysisReportConfig
 from .analysis.quality import audit_analysis_quality
 from .analysis.renderer import render_analysis
 from .analysis.review import build_analysis_review
+from .analysis.review_record import apply_analysis_review
 from .analysis.safety import audit_analysis_safety
 from .analysis.technical_features import (
     TechnicalFeatureReport,
@@ -230,6 +231,14 @@ def _build_parser() -> argparse.ArgumentParser:
     review.add_argument("--analysis-report", type=Path, required=True)
     review.add_argument("--artifact-root", type=Path, required=True)
     review.add_argument("--output-dir", type=Path, required=True)
+
+    review_record = subparsers.add_parser(
+        "apply-analysis-review", help="apply a complete human review submission"
+    )
+    review_record.add_argument("--packet", type=Path, required=True)
+    review_record.add_argument("--packet-report", type=Path, required=True)
+    review_record.add_argument("--submission", type=Path, required=True)
+    review_record.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -705,6 +714,17 @@ def run_analysis_review(args: argparse.Namespace) -> int:
     return 0 if report.get("review_packet_ready") is True else 1
 
 
+def run_apply_analysis_review(args: argparse.Namespace) -> int:
+    report = apply_analysis_review(
+        packet_path=args.packet,
+        packet_report_path=args.packet_report,
+        submission_path=args.submission,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("status") == "ready" else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -740,6 +760,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_analysis_safety(args)
     if args.command == "build-analysis-review":
         return run_analysis_review(args)
+    if args.command == "apply-analysis-review":
+        return run_apply_analysis_review(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 
