@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .analysis.contracts import AnalysisReportConfig
+from .analysis.quality import audit_analysis_quality
 from .analysis.renderer import render_analysis
 from .analysis.technical_features import (
     TechnicalFeatureReport,
@@ -181,6 +182,15 @@ def _build_parser() -> argparse.ArgumentParser:
     renderer.add_argument("--analysis-report", type=Path, required=True)
     renderer.add_argument("--input-root", type=Path, required=True)
     renderer.add_argument("--output-dir", type=Path, required=True)
+
+    quality = subparsers.add_parser(
+        "audit-analysis-quality", help="audit analysis evidence coverage offline"
+    )
+    quality.add_argument("--analysis", type=Path, required=True)
+    quality.add_argument("--analysis-report", type=Path, required=True)
+    quality.add_argument("--render-report", type=Path, required=True)
+    quality.add_argument("--input-root", type=Path, required=True)
+    quality.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -600,6 +610,18 @@ def run_render_analysis(args: argparse.Namespace) -> int:
     return 0 if report.get("status") == "ready" else 1
 
 
+def run_analysis_quality(args: argparse.Namespace) -> int:
+    report = audit_analysis_quality(
+        analysis_path=args.analysis,
+        analysis_report_path=args.analysis_report,
+        render_report_path=args.render_report,
+        input_root=args.input_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("quality_ready") is True else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -627,6 +649,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_analysis_report(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
+    if args.command == "audit-analysis-quality":
+        return run_analysis_quality(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 

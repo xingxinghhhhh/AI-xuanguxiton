@@ -211,3 +211,23 @@ This writes `research_analysis.md` and `analysis_render_report.json`. It checks
 the analysis SHA, evidence paths and hashes, escapes model text for Markdown,
 and refuses reports that are not analysis-ready or that set `decision_ready` to
 true.
+
+## Offline analysis quality and evidence audit
+
+The `analysis-quality-v1` node audits a rendered `analysis-report-v1` result
+without another API call. It verifies all eight sections, 100% claim citation
+coverage, the fixed section-to-evidence mapping, use of all six evidence IDs,
+input and rendered-report hashes, and the non-trading decision gate.
+
+```bash
+python -m a_share_ai.cli audit-analysis-quality \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --render-report reports/analysis-deepseek-001/rendered/analysis_render_report.json \
+  --input-root reports \
+  --output-dir reports/analysis-deepseek-001/quality
+```
+
+The command writes `analysis_quality_report.json` with `quality_ready=true`
+only when the complete evidence audit passes. It never calls an AI provider,
+reads credentials, or sets `decision_ready=true`.

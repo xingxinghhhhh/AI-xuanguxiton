@@ -39,6 +39,12 @@ all eight section names exactly as shown. The local program will validate every
 field and expand citation paths and hashes after validation. Every claim object
 must use exactly these keys: claim_id, kind, text, citation_ids, observed_dates.
 Do not use citations, description, summary, or any other claim keys.
+Return at least one claim in each of the eight sections. If a section lacks
+sufficient supplied evidence, return one kind=unknown claim for that section.
+Use these evidence IDs so the result covers the supplied bundle: market for
+market, technical or market for technical, price_plan or technical for
+price_plan, profitability for profitability, growth for growth, announcements
+for announcements, and any supplied evidence for risks and unknowns.
 """
 
 

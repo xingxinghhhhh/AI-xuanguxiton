@@ -15,6 +15,7 @@ from .deepseek_provider import (
     UrllibDeepSeekTransport,
 )
 from .offline_provider import AnalysisProvider, OfflineAnalysisProvider, ProviderError
+from .quality import ANALYSIS_QUALITY_VERSION, AnalysisQualityError, audit_analysis_quality
 from .real_provider import OpenAIAnalysisProvider, ProviderTransportError, UrllibResponseTransport
 from .renderer import AnalysisRenderError, render_analysis
 from .request_builder import (
@@ -44,6 +45,8 @@ __all__ = [
     "AnalysisReportConfig",
     "AnalysisReportSource",
     "AnalysisRenderError",
+    "AnalysisQualityError",
+    "ANALYSIS_QUALITY_VERSION",
     "AnalysisValidationError",
     "DeepSeekAnalysisProvider",
     "DeepSeekTransportError",
@@ -66,4 +69,5 @@ __all__ = [
     "build_deepseek_request",
     "provider_output_schema",
     "render_analysis",
+    "audit_analysis_quality",
 ]
