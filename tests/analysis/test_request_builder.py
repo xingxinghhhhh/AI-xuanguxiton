@@ -117,3 +117,34 @@ def test_market_context_summary_is_forwarded_as_structured_values_only() -> None
     assert "market_context_snapshot" not in serialized
     assert "raw_response" not in serialized
     assert "C:/private" not in serialized
+
+
+def test_relative_strength_summary_is_forwarded_without_local_metadata() -> None:
+    bundle, entries = _bundle_and_entries()
+    bundle["bundle_version"] = "analysis-input-v2"
+    bundle["summaries"]["technical"]["relative_strength"] = {
+        "version": "relative-strength-v1",
+        "benchmarks": [
+            {
+                "benchmark_symbol": "000001.SH",
+                "return_1d": "0.03",
+                "return_5d": None,
+                "return_20d": None,
+                "relative_return_1d": "0.02",
+                "relative_return_5d": None,
+                "relative_return_20d": None,
+            }
+        ],
+    }
+
+    request = build_deepseek_request(bundle, entries, model="deepseek-v4-flash")
+    serialized = json.dumps(request, ensure_ascii=False, sort_keys=True)
+    context = json.loads(request["messages"][1]["content"])
+
+    assert "relative-strength-v1" in serialized
+    assert context["evidence"][1]["summary"]["relative_strength"]["benchmarks"][0][
+        "relative_return_1d"
+    ] == "0.02"
+    assert "report_path" not in serialized
+    assert "raw_response" not in serialized
+    assert "C:/private" not in serialized

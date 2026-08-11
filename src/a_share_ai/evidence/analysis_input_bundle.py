@@ -10,7 +10,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal, localcontext
+from decimal import Decimal, InvalidOperation, localcontext
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -28,6 +28,7 @@ from .contracts import (
     BUNDLE_VERSION_V1,
     BUNDLE_VERSION_V2,
     MARKET_CONTEXT_SUMMARY_VERSION,
+    RELATIVE_STRENGTH_VERSION,
     SCHEMA_VERSION,
     AnalysisInputBundle,
     AnalysisInputReport,
@@ -517,6 +518,111 @@ class AnalysisInputSource:
             },
         )
 
+    @staticmethod
+    def _parse_optional_return(value: Any, *, field: str) -> Decimal | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            raise BundleError(f"{field} must be a decimal or null")
+        try:
+            parsed = Decimal(str(value))
+        except (InvalidOperation, ValueError) as exc:
+            raise BundleError(f"{field} must be a decimal or null") from exc
+        if not parsed.is_finite():
+            raise BundleError(f"{field} must be a finite decimal or null")
+        return parsed
+
+    @staticmethod
+    def _format_decimal(value: Decimal | None) -> str | None:
+        return format(value, "f") if value is not None else None
+
+    def _build_relative_strength(self, market_summary: Mapping[str, Any]) -> dict[str, Any]:
+        cfg = self.config
+        technical_report, _ = _read_json(cfg.technical_report)
+        if technical_report.get("indicator_version") != "technical-v1":
+            raise BundleError("technical indicator version is unsupported")
+        features, _ = _load_jsonl(cfg.technical_features, name="technical_features")
+        latest_feature = max(
+            features,
+            key=lambda item: _parse_iso_date(item.get("trade_date"), "technical_features.trade_date"),
+        )
+        latest_trade_date = _parse_iso_date(
+            latest_feature.get("trade_date"), "technical_features.trade_date"
+        )
+        if technical_report.get("last_trade_date") != latest_trade_date.isoformat():
+            raise BundleError("technical latest trade date does not match its report")
+
+        context = market_summary.get("market_context")
+        if not isinstance(context, Mapping):
+            raise BundleError("relative strength requires a market context summary")
+        if (
+            context.get("version") != MARKET_CONTEXT_VERSION
+            or context.get("market_context_summary_version")
+            != MARKET_CONTEXT_SUMMARY_VERSION
+        ):
+            raise BundleError("market context summary version is unsupported")
+        if context.get("index_symbols") != list(INDEX_SYMBOLS):
+            raise BundleError("relative strength benchmark index list is invalid")
+        index_features = context.get("index_features")
+        if not isinstance(index_features, Mapping) or set(index_features) != set(INDEX_SYMBOLS):
+            raise BundleError("relative strength benchmark features are invalid")
+
+        stock_returns: dict[int, Decimal | None] = {}
+        for period, field in ((1, "return_1d"), (5, "return_5d"), (20, "return_20d")):
+            if field not in latest_feature:
+                raise BundleError(f"technical_features.{field} is required")
+            stock_returns[period] = self._parse_optional_return(
+                latest_feature.get(field), field=f"technical_features.{field}"
+            )
+
+        benchmarks: list[dict[str, Any]] = []
+        with localcontext() as decimal_context:
+            decimal_context.prec = 28
+            for benchmark_symbol in INDEX_SYMBOLS:
+                feature = index_features[benchmark_symbol]
+                if not isinstance(feature, Mapping):
+                    raise BundleError(f"market context features are invalid: {benchmark_symbol}")
+                if feature.get("latest_trade_date") != latest_trade_date.isoformat():
+                    raise BundleError(
+                        f"market context latest trade date does not match technical: {benchmark_symbol}"
+                    )
+                benchmark_returns: dict[int, Decimal | None] = {}
+                for period, field in ((1, "return_1d"), (5, "return_5d"), (20, "return_20d")):
+                    if field not in feature:
+                        raise BundleError(f"market_context.{benchmark_symbol}.{field} is required")
+                    benchmark_returns[period] = self._parse_optional_return(
+                        feature.get(field), field=f"market_context.{benchmark_symbol}.{field}"
+                    )
+                relative_returns = {
+                    period: (
+                        stock_returns[period] - benchmark_returns[period]
+                        if stock_returns[period] is not None and benchmark_returns[period] is not None
+                        else None
+                    )
+                    for period in (1, 5, 20)
+                }
+                benchmarks.append(
+                    {
+                        "benchmark_symbol": benchmark_symbol,
+                        "return_1d": self._format_decimal(benchmark_returns[1]),
+                        "return_5d": self._format_decimal(benchmark_returns[5]),
+                        "return_20d": self._format_decimal(benchmark_returns[20]),
+                        "relative_return_1d": self._format_decimal(relative_returns[1]),
+                        "relative_return_5d": self._format_decimal(relative_returns[5]),
+                        "relative_return_20d": self._format_decimal(relative_returns[20]),
+                    }
+                )
+        return {"version": RELATIVE_STRENGTH_VERSION, "benchmarks": benchmarks}
+
+    def _augment_relative_strength(
+        self, *, market: _Inspection, technical: _Inspection
+    ) -> _Inspection:
+        if self.config.market_context_snapshot is None:
+            return technical
+        summary = dict(technical.summary)
+        summary["relative_strength"] = self._build_relative_strength(market.summary)
+        return _Inspection(technical.evidence, summary)
+
     def _inspect_price_plan(self, technical_report_sha: str) -> _Inspection:
         cfg = self.config
         report, _ = _read_json(cfg.price_plan_report)
@@ -664,7 +770,9 @@ class AnalysisInputSource:
                 if not path.exists():
                     raise BundleError(f"missing input artifact: {name}")
             market = self._inspect_market()
-            technical = self._inspect_technical()
+            technical = self._augment_relative_strength(
+                market=market, technical=self._inspect_technical()
+            )
             price_plan = self._inspect_price_plan(sha256_bytes(cfg.technical_report.read_bytes()))
             profitability = self._inspect_fundamental(
                 kind="profitability",

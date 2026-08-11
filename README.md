@@ -247,6 +247,17 @@ The v2 market summary also includes the deterministic
 Returns use `close_latest / close_n_periods_ago - 1`; unavailable warmup periods
 are represented as `null`.
 
+## Analysis input v2 relative strength summary
+
+When a v2 bundle includes market context, the technical summary also contains a
+deterministic `relative-strength-v1` object. For each fixed benchmark index it
+provides the stock return fields from `technical-v1`, the benchmark return
+fields, and `relative_return_1d`, `relative_return_5d`, and
+`relative_return_20d`, calculated as `stock_return_n - benchmark_return_n`.
+Insufficient stock or benchmark history stays `null`; the summary does not
+assign strong/weak labels, rankings, or trading signals. The v1 bundle and
+technical indicator calculation remain unchanged.
+
 ## Render a readable research report
 
 After a successful `analyze-input` run, render the validated JSON and evidence

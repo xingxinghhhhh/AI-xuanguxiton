@@ -10,6 +10,7 @@ BUNDLE_VERSION_V1 = "analysis-input-v1"
 BUNDLE_VERSION_V2 = "analysis-input-v2"
 SUPPORTED_BUNDLE_VERSIONS = frozenset({BUNDLE_VERSION_V1, BUNDLE_VERSION_V2})
 MARKET_CONTEXT_SUMMARY_VERSION = "market-context-summary-v1"
+RELATIVE_STRENGTH_VERSION = "relative-strength-v1"
 # Backward-compatible alias for callers that explicitly build v1 bundles.
 BUNDLE_VERSION = BUNDLE_VERSION_V1
 

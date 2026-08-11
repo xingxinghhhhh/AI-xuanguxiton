@@ -87,7 +87,15 @@ def build_artifacts(root: Path, *, mixed_as_of: bool = False, future_feature: bo
     feature_date = "2026-08-11" if future_feature else "2026-08-07"
     feature_raw = write_jsonl(
         technical_features,
-        [{"symbol": symbol, "trade_date": feature_date, "close": "10.5", "sma_20": "10"}],
+        [{
+            "symbol": symbol,
+            "trade_date": feature_date,
+            "close": "10.5",
+            "return_1d": "0.05",
+            "return_5d": None,
+            "return_20d": None,
+            "sma_20": "10",
+        }],
     )
     technical_report = root / "analysis" / "technical_report.json"
     technical_report_raw = write_json(
@@ -308,6 +316,22 @@ def test_v2_bundle_adds_market_context_to_existing_market_evidence(tmp_path: Pat
         "return_20d": None,
         "record_count": 2,
     }
+    technical_summary = bundle["summaries"]["technical"]
+    assert technical_summary["relative_strength"] == {
+        "version": "relative-strength-v1",
+        "benchmarks": [
+            {
+                "benchmark_symbol": symbol,
+                "return_1d": "0.03",
+                "return_5d": None,
+                "return_20d": None,
+                "relative_return_1d": "0.02",
+                "relative_return_5d": None,
+                "relative_return_20d": None,
+            }
+            for symbol in ("000001.SH", "399001.SZ", "399006.SZ")
+        ],
+    }
     assert len(market["artifact_paths"]) == 5
     second = AnalysisInputSource(config).capture(tmp_path / "out-2")
     assert report["bundle_sha256"] == second["bundle_sha256"]
@@ -352,6 +376,64 @@ def test_v2_out_of_order_context_dates_fail_closed(tmp_path: Path) -> None:
 
     assert report["status"] == "invalid"
     assert "not ascending" in report["issues"][0]["message"]
+
+
+def test_v2_relative_strength_missing_stock_return_fails_closed(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    feature = json.loads(config.technical_features.read_text(encoding="utf-8").strip())
+    feature.pop("return_1d")
+    feature_raw = write_jsonl(config.technical_features, [feature])
+    technical_report = json.loads(config.technical_report.read_text(encoding="utf-8"))
+    technical_report["output_sha256"] = sha256_bytes(feature_raw)
+    write_json(config.technical_report, technical_report)
+
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "invalid"
+    assert "technical_features.return_1d is required" in report["issues"][0]["message"]
+
+
+def test_v2_relative_strength_date_mismatch_fails_closed(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    feature = json.loads(config.technical_features.read_text(encoding="utf-8").strip())
+    feature["trade_date"] = "2026-08-06"
+    feature_raw = write_jsonl(config.technical_features, [feature])
+    technical_report = json.loads(config.technical_report.read_text(encoding="utf-8"))
+    technical_report["last_trade_date"] = "2026-08-06"
+    technical_report["output_sha256"] = sha256_bytes(feature_raw)
+    write_json(config.technical_report, technical_report)
+
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "invalid"
+    assert "does not match technical" in report["issues"][0]["message"]
+
+
+def test_v2_relative_strength_invalid_decimal_fails_closed(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    feature = json.loads(config.technical_features.read_text(encoding="utf-8").strip())
+    feature["return_1d"] = "not-a-decimal"
+    feature_raw = write_jsonl(config.technical_features, [feature])
+    technical_report = json.loads(config.technical_report.read_text(encoding="utf-8"))
+    technical_report["output_sha256"] = sha256_bytes(feature_raw)
+    write_json(config.technical_report, technical_report)
+
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "invalid"
+    assert "technical_features.return_1d must be a decimal" in report["issues"][0]["message"]
+
+
+def test_v2_relative_strength_technical_version_mismatch_fails_closed(tmp_path: Path) -> None:
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    technical_report = json.loads(config.technical_report.read_text(encoding="utf-8"))
+    technical_report["indicator_version"] = "technical-v2"
+    write_json(config.technical_report, technical_report)
+
+    report = AnalysisInputSource(config).capture(tmp_path / "out")
+
+    assert report["status"] == "invalid"
+    assert "technical indicator version is unsupported" in report["issues"][0]["message"]
 
 
 def test_v2_bundle_is_consumable_by_offline_analysis_validator(tmp_path: Path) -> None:
