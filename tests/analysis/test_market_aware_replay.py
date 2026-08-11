@@ -34,7 +34,7 @@ def test_market_aware_replay_reaches_pending_review_packet(tmp_path: Path) -> No
         bundle_path=bundle_path,
         bundle_report_path=bundle_report_path,
         input_root=input_root,
-        response_fixture=FIXTURE_ROOT / "valid_provider.json",
+        response_fixture=Path("fixtures/analysis/market_aware_valid_observation.json"),
         output_dir=output_dir,
     )
 
@@ -113,7 +113,7 @@ def test_market_aware_replay_stops_after_analysis_failure(tmp_path: Path) -> Non
         bundle_path=bundle_path,
         bundle_report_path=bundle_report_path,
         input_root=input_root,
-        response_fixture=FIXTURE_ROOT / "malformed_provider_output.json",
+        response_fixture=Path("fixtures/analysis/market_aware_invalid_fact.json"),
         output_dir=input_root / "replay",
     )
 

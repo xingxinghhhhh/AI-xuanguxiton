@@ -34,6 +34,10 @@ Return one valid JSON object and no Markdown. Every claim must cite one or more
 supplied evidence IDs. Use kind=unknown when the supplied evidence is insufficient.
 Do not produce BUY, SELL, HOLD, 涔板叆, 鍗栧嚭, 瑙傛湜, entry prices, stop loss, take
 profit, position sizing, orders, or any other executable trading instruction.
+The kind field must be exactly one of: observation, risk, unknown. Use
+observation for a directly supplied evidence statement, risk only for a
+supported risk statement, and unknown when evidence is insufficient. Never use
+fact, finding, statement, conclusion, recommendation, trend, or any other kind.
 The required JSON shape is shown in the system message example; keep all keys and
 all eight section names exactly as shown. The local program will validate every
 field and expand citation paths and hashes after validation. Every claim object

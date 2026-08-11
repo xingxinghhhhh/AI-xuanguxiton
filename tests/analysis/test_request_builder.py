@@ -88,6 +88,16 @@ def test_deepseek_request_uses_json_mode_without_responses_schema() -> None:
     assert '"description":' not in request["messages"][0]["content"]
 
 
+def test_deepseek_prompt_freezes_claim_kind_enum() -> None:
+    bundle, entries = _bundle_and_entries()
+
+    request = build_deepseek_request(bundle, entries, model="deepseek-v4-flash")
+    prompt = request["messages"][0]["content"]
+
+    assert "kind field must be exactly one of: observation, risk, unknown" in prompt
+    assert "fact, finding, statement, conclusion, recommendation, trend" in prompt
+
+
 def test_market_context_summary_is_forwarded_as_structured_values_only() -> None:
     bundle, entries = _bundle_and_entries()
     bundle["bundle_version"] = "analysis-input-v2"

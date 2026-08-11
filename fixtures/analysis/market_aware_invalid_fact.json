@@ -1,0 +1,16 @@
+{
+  "analysis_version": "analysis-report-v1",
+  "as_of": "2026-08-10T12:00:00+00:00",
+  "schema_version": "1.0",
+  "sections": {
+    "announcements": [{"claim_id": "announcements-001", "kind": "unknown", "text": "No announcement content was supplied.", "citation_ids": ["announcements"], "observed_dates": []}],
+    "growth": [{"claim_id": "growth-001", "kind": "unknown", "text": "No growth figures were supplied.", "citation_ids": ["growth"], "observed_dates": []}],
+    "market": [{"claim_id": "market-001", "kind": "fact", "text": "This negative fixture must be rejected.", "citation_ids": ["market"], "observed_dates": ["2026-08-10"]}],
+    "price_plan": [{"claim_id": "price-plan-001", "kind": "unknown", "text": "No price plan values were supplied.", "citation_ids": ["price_plan"], "observed_dates": []}],
+    "profitability": [{"claim_id": "profitability-001", "kind": "unknown", "text": "No profitability figures were supplied.", "citation_ids": ["profitability"], "observed_dates": []}],
+    "risks": [{"claim_id": "risk-001", "kind": "risk", "text": "The supplied evidence does not include a complete risk assessment.", "citation_ids": ["market"], "observed_dates": []}],
+    "technical": [{"claim_id": "technical-001", "kind": "observation", "text": "The supplied technical summary is available.", "citation_ids": ["technical"], "observed_dates": ["2026-08-10"]}],
+    "unknowns": [{"claim_id": "unknown-001", "kind": "unknown", "text": "The supplied evidence is insufficient for additional claims.", "citation_ids": ["market", "technical"], "observed_dates": []}]
+  },
+  "symbol": "600000.SH"
+}
