@@ -104,4 +104,3 @@ def smoke_market_aware_analysis(
     }
     write_atomic(output_dir / "market_aware_smoke_report.json", _json_bytes(report))
     return report
-

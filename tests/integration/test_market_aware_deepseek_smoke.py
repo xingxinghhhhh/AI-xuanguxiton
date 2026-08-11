@@ -118,4 +118,3 @@ def test_market_aware_smoke_fails_once_and_redacts_provider_error(
     assert report["decision_ready"] is False
     assert "test-smoke-secret" not in serialized
     assert report["stages"]["render"]["status"] == "skipped"
-
