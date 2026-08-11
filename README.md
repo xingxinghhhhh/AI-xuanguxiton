@@ -258,6 +258,28 @@ Insufficient stock or benchmark history stays `null`; the summary does not
 assign strong/weak labels, rankings, or trading signals. The v1 bundle and
 technical indicator calculation remain unchanged.
 
+## Market-aware offline end-to-end replay
+
+To verify that the v2 market summary and relative-strength summary survive the
+complete read-only research chain, run the offline replay with an existing v2
+bundle and the normal provider response fixture:
+
+```bash
+python -m a_share_ai.cli replay-market-aware-analysis \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --response-fixture fixtures/analysis/report/valid_provider.json \
+  --output-dir reports/market-aware-replay-001
+```
+
+The `market-aware-replay-v1` report runs offline analysis, Markdown rendering,
+quality, decision-input, safety, and pending-only human review in order. It
+records stage paths and SHA-256 values and verifies that
+`market-context-summary-v1` and `relative-strength-v1` are present. The replay
+stops on the first failed stage, never calls DeepSeek, never creates a review
+result or research release, and keeps `decision_ready=false`.
+
 ## Render a readable research report
 
 After a successful `analyze-input` run, render the validated JSON and evidence

@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .analysis.contracts import AnalysisReportConfig
+from .analysis.market_aware_replay import replay_market_aware_analysis
 from .analysis.quality import audit_analysis_quality
 from .analysis.release_diff import compare_research_releases
 from .analysis.renderer import render_analysis
@@ -197,6 +198,16 @@ def _build_parser() -> argparse.ArgumentParser:
     analysis.add_argument("--timeout-seconds", type=float, default=60.0)
     analysis.add_argument("--env-file", type=Path)
     analysis.add_argument("--output-dir", type=Path, required=True)
+
+    market_aware_replay = subparsers.add_parser(
+        "replay-market-aware-analysis",
+        help="replay an analysis-input-v2 chain through a pending review packet",
+    )
+    market_aware_replay.add_argument("--bundle", type=Path, required=True)
+    market_aware_replay.add_argument("--bundle-report", type=Path, required=True)
+    market_aware_replay.add_argument("--input-root", type=Path, required=True)
+    market_aware_replay.add_argument("--response-fixture", type=Path, required=True)
+    market_aware_replay.add_argument("--output-dir", type=Path, required=True)
 
     renderer = subparsers.add_parser(
         "render-analysis", help="render a validated analysis report as Markdown"
@@ -776,6 +787,18 @@ def run_analysis_report(args: argparse.Namespace) -> int:
     return 0 if report.get("analysis_ready") is True else 1
 
 
+def run_market_aware_replay(args: argparse.Namespace) -> int:
+    report = replay_market_aware_analysis(
+        bundle_path=args.bundle,
+        bundle_report_path=args.bundle_report,
+        input_root=args.input_root,
+        response_fixture=args.response_fixture,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("review_packet_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -923,6 +946,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_analysis_input(args)
     if args.command == "analyze-input":
         return run_analysis_report(args)
+    if args.command == "replay-market-aware-analysis":
+        return run_market_aware_replay(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":
