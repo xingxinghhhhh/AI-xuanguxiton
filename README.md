@@ -685,6 +685,28 @@ state bindings, symbols, freshness, and strict `as_of` ordering. It verifies
 integrity only: stale or blocked sessions remain blocked and
 `decision_ready=false`.
 
+## Render a market-aware session history
+
+Render the Node37 history and Node38 audit as a deterministic, offline
+Markdown timeline:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-history \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-audit-report reports/session-history/history-audit/market_aware_session_history_audit_report.json \
+  --history-root reports/session-history \
+  --output-dir reports/session-history/history-render
+```
+
+The `market-aware-session-history-render-v1` output records the actual input
+paths, byte sizes, SHA-256 values, package timeline, readiness flags, and
+Markdown SHA. Stale or blocked histories remain visibly blocked, and
+`render_ready` is true only when both history and independent audit readiness
+are true. This is a read-only status view: it does not infer market trends,
+returns, investment value, or trading authorization, and always keeps
+`decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
