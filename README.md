@@ -923,6 +923,26 @@ This writes `market_aware_session_history_closure_admission.md` and its
 `market_aware_session_history_closure_admission_render_report.json`. The view
 preserves ready/stale/blocked status and always keeps `decision_ready=false`.
 
+## Audit the market-aware session history closure admission render
+
+Independently audit the Node50 Markdown, render report, and their Node48/49
+bindings:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-closure-admission-render \
+  --admission reports/session-history/history-closure-admission/market_aware_session_history_closure_admission.json \
+  --admission-report reports/session-history/history-closure-admission/market_aware_session_history_closure_admission_report.json \
+  --admission-audit-report reports/session-history/history-closure-admission-audit/market_aware_session_history_closure_admission_audit_report.json \
+  --markdown reports/session-history/history-closure-admission-render/market_aware_session_history_closure_admission.md \
+  --render-report reports/session-history/history-closure-admission-render/market_aware_session_history_closure_admission_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-admission-render-audit
+```
+
+This writes `market_aware_session_history_closure_admission_render_audit_report.json`.
+It independently recomputes the Markdown SHA and always keeps
+`decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
