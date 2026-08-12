@@ -35,6 +35,9 @@ from .analysis.market_aware_session_history_closure_render_audit import (
 from .analysis.market_aware_session_history_closure_renderer import (
     render_market_aware_session_history_closure,
 )
+from .analysis.market_aware_session_history_final_receipt import (
+    build_market_aware_session_history_final_receipt,
+)
 from .analysis.market_aware_session_history_manifest import (
     build_market_aware_session_history_manifest,
 )
@@ -714,6 +717,29 @@ def _build_parser() -> argparse.ArgumentParser:
         "--artifact-root", type=Path, required=True
     )
     market_aware_session_history_closure_admission_render_audit.add_argument(
+        "--output-dir", type=Path, required=True
+    )
+
+    market_aware_session_history_final_receipt = subparsers.add_parser(
+        "build-market-aware-session-history-final-receipt",
+        help="build the final market-aware session history receipt",
+    )
+    market_aware_session_history_final_receipt.add_argument(
+        "--admission", type=Path, required=True
+    )
+    market_aware_session_history_final_receipt.add_argument(
+        "--admission-report", type=Path, required=True
+    )
+    market_aware_session_history_final_receipt.add_argument(
+        "--render-report", type=Path, required=True
+    )
+    market_aware_session_history_final_receipt.add_argument(
+        "--render-audit-report", type=Path, required=True
+    )
+    market_aware_session_history_final_receipt.add_argument(
+        "--artifact-root", type=Path, required=True
+    )
+    market_aware_session_history_final_receipt.add_argument(
         "--output-dir", type=Path, required=True
     )
 
@@ -1630,6 +1656,21 @@ def run_market_aware_session_history_closure_admission_render_audit(
     return 0 if report.get("render_audit_ready") is True else 1
 
 
+def run_market_aware_session_history_final_receipt(
+    args: argparse.Namespace,
+) -> int:
+    report = build_market_aware_session_history_final_receipt(
+        admission_path=args.admission,
+        admission_report_path=args.admission_report,
+        render_report_path=args.render_report,
+        render_audit_report_path=args.render_audit_report,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("receipt_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -1827,6 +1868,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_market_aware_session_history_closure_admission_renderer(args)
     if args.command == "audit-market-aware-session-history-closure-admission-render":
         return run_market_aware_session_history_closure_admission_render_audit(args)
+    if args.command == "build-market-aware-session-history-final-receipt":
+        return run_market_aware_session_history_final_receipt(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":

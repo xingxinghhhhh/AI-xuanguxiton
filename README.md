@@ -943,6 +943,25 @@ This writes `market_aware_session_history_closure_admission_render_audit_report.
 It independently recomputes the Markdown SHA and always keeps
 `decision_ready=false`.
 
+## Build the market-aware session history final receipt
+
+Build one deterministic JSON receipt from the Node48 admission, Node50 render,
+and Node51 render audit:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-final-receipt \
+  --admission reports/session-history/history-closure-admission/market_aware_session_history_closure_admission.json \
+  --admission-report reports/session-history/history-closure-admission/market_aware_session_history_closure_admission_report.json \
+  --render-report reports/session-history/history-closure-admission-render/market_aware_session_history_closure_admission_render_report.json \
+  --render-audit-report reports/session-history/history-closure-admission-render-audit/market_aware_session_history_closure_admission_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/final-receipt
+```
+
+This writes `market_aware_session_history_final_receipt.json` and its report.
+The receipt only summarizes evidence-chain status and always keeps
+`decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,

@@ -74,6 +74,11 @@ from .market_aware_session_history_closure_renderer import (
     MarketAwareSessionHistoryClosureRenderError,
     render_market_aware_session_history_closure,
 )
+from .market_aware_session_history_final_receipt import (
+    MARKET_AWARE_SESSION_HISTORY_FINAL_RECEIPT_VERSION,
+    MarketAwareSessionHistoryFinalReceiptError,
+    build_market_aware_session_history_final_receipt,
+)
 from .market_aware_session_history_manifest import (
     MARKET_AWARE_SESSION_HISTORY_MANIFEST_VERSION,
     MarketAwareSessionHistoryManifestError,
@@ -292,6 +297,9 @@ __all__ = [
     "MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_RENDER_AUDIT_VERSION",
     "MarketAwareSessionHistoryClosureAdmissionRenderAuditError",
     "audit_market_aware_session_history_closure_admission_render",
+    "MARKET_AWARE_SESSION_HISTORY_FINAL_RECEIPT_VERSION",
+    "MarketAwareSessionHistoryFinalReceiptError",
+    "build_market_aware_session_history_final_receipt",
     "MARKET_AWARE_SMOKE_VERSION",
     "smoke_market_aware_analysis",
     "audit_analysis_safety",
