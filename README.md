@@ -768,6 +768,25 @@ paths, byte counts, SHA-256 values, artifact roles, status fields, and
 `decision_ready=false`. It verifies integrity only and preserves any stale or
 blocked history state.
 
+## Render a market-aware session history manifest
+
+Render the Node41 manifest and Node42 audit into a deterministic Markdown
+evidence table:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-history-manifest \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --audit-report reports/session-history/history-manifest-audit/market_aware_session_history_manifest_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest-render
+```
+
+The `market-aware-session-history-manifest-render-v1` output shows only
+literal paths, byte counts, SHA-256 values, history bounds, readiness, and
+issues. It is a read-only handoff view and always keeps
+`decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
