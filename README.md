@@ -787,6 +787,26 @@ literal paths, byte counts, SHA-256 values, history bounds, readiness, and
 issues. It is a read-only handoff view and always keeps
 `decision_ready=false`.
 
+## Audit a rendered market-aware session history manifest
+
+Independently verify the Node43 Markdown/render report chain:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-manifest-render \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --manifest-audit-report reports/session-history/history-manifest-audit/market_aware_session_history_manifest_audit_report.json \
+  --markdown reports/session-history/history-manifest-render/market_aware_session_history_manifest.md \
+  --render-report reports/session-history/history-manifest-render/market_aware_session_history_manifest_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest-render-audit
+```
+
+The `market-aware-session-history-manifest-render-audit-v1` report checks
+paths, versions, canonical report hashes, SHA bindings, six artifact roles,
+Markdown SHA, and readiness fields without re-rendering or re-auditing the
+inputs. It always keeps `decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
