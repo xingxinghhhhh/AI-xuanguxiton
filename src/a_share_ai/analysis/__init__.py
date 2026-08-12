@@ -44,6 +44,11 @@ from .market_aware_session_history_manifest import (
     MarketAwareSessionHistoryManifestError,
     build_market_aware_session_history_manifest,
 )
+from .market_aware_session_history_manifest_audit import (
+    MARKET_AWARE_SESSION_HISTORY_MANIFEST_AUDIT_VERSION,
+    MarketAwareSessionHistoryManifestAuditError,
+    audit_market_aware_session_history_manifest,
+)
 from .market_aware_session_history_render_audit import (
     MARKET_AWARE_SESSION_HISTORY_RENDER_AUDIT_VERSION,
     MarketAwareSessionHistoryRenderAuditError,
@@ -212,6 +217,9 @@ __all__ = [
     "MARKET_AWARE_SESSION_HISTORY_MANIFEST_VERSION",
     "MarketAwareSessionHistoryManifestError",
     "build_market_aware_session_history_manifest",
+    "MARKET_AWARE_SESSION_HISTORY_MANIFEST_AUDIT_VERSION",
+    "MarketAwareSessionHistoryManifestAuditError",
+    "audit_market_aware_session_history_manifest",
     "MARKET_AWARE_SMOKE_VERSION",
     "smoke_market_aware_analysis",
     "audit_analysis_safety",

@@ -750,6 +750,24 @@ roles, controlled relative paths, byte counts, SHA-256 values, readiness
 states, and `decision_ready=false`. It requires the Node40 render audit to be
 `audit_ready=true`, but does not rerun or reinterpret any upstream artifact.
 
+## Audit a market-aware session history manifest
+
+Independently verify the Node41 manifest, report, and all six declared
+artifacts:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-manifest \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest-audit
+```
+
+The `market-aware-session-history-manifest-audit-v1` report recomputes actual
+paths, byte counts, SHA-256 values, artifact roles, status fields, and
+`decision_ready=false`. It verifies integrity only and preserves any stale or
+blocked history state.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
