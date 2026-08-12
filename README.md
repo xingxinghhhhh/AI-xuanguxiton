@@ -567,6 +567,27 @@ the session status and time summary. Blocked sessions may be packaged, but
 `decision_ready=false` always. Declared release, bundle, and calendar hashes
 remain summaries only; no missing upstream path is inferred.
 
+## Independently audit a market-aware session package
+
+Re-open a package as an offline consumer and verify the manifest, package
+report, and all five declared artifacts without rebuilding the package:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-package \
+  --package reports/analysis-deepseek-001/session-package/market_aware_session_package.json \
+  --package-report reports/analysis-deepseek-001/session-package/market_aware_session_package_report.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session-package-audit
+```
+
+The `market-aware-session-package-audit-v1` report independently checks
+relative paths, actual byte sizes, SHA-256 values, versions, timezone-aware
+time ordering, and the session/freshness/renderer relation chain. A successful
+audit means package integrity only: a stale or blocked package can have
+`audit_ready=true` while retaining `session_ready=false` and
+`decision_ready=false`. The audit report is written only when its output
+directory is inside `artifact-root`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,

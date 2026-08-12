@@ -13,6 +13,7 @@ from .analysis.market_aware_release_replay import replay_market_aware_release
 from .analysis.market_aware_replay import replay_market_aware_analysis
 from .analysis.market_aware_session import build_market_aware_session
 from .analysis.market_aware_session_package import build_market_aware_session_package
+from .analysis.market_aware_session_package_audit import audit_market_aware_session_package
 from .analysis.market_aware_session_renderer import render_market_aware_session
 from .analysis.market_aware_smoke import smoke_market_aware_analysis
 from .analysis.quality import audit_analysis_quality
@@ -271,6 +272,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     market_aware_session_package.add_argument("--artifact-root", type=Path, required=True)
     market_aware_session_package.add_argument("--output-dir", type=Path, required=True)
+
+    market_aware_session_package_audit = subparsers.add_parser(
+        "audit-market-aware-session-package",
+        help="independently audit a market-aware session package",
+    )
+    market_aware_session_package_audit.add_argument("--package", type=Path, required=True)
+    market_aware_session_package_audit.add_argument(
+        "--package-report", type=Path, required=True
+    )
+    market_aware_session_package_audit.add_argument("--artifact-root", type=Path, required=True)
+    market_aware_session_package_audit.add_argument("--output-dir", type=Path, required=True)
 
     renderer = subparsers.add_parser(
         "render-analysis", help="render a validated analysis report as Markdown"
@@ -929,6 +941,17 @@ def run_market_aware_session_package(args: argparse.Namespace) -> int:
     return 0 if report.get("package_ready") is True else 1
 
 
+def run_market_aware_session_package_audit(args: argparse.Namespace) -> int:
+    report = audit_market_aware_session_package(
+        package_path=args.package,
+        package_report_path=args.package_report,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("audit_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -1088,6 +1111,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_market_aware_session_renderer(args)
     if args.command == "build-market-aware-session-package":
         return run_market_aware_session_package(args)
+    if args.command == "audit-market-aware-session-package":
+        return run_market_aware_session_package_audit(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":
