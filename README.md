@@ -497,6 +497,32 @@ release when the submission is invalid or not fully `confirmed`. A successful
 replay writes the existing review result and research release artifacts plus
 `market_aware_release_replay_report.json`; `decision_ready` remains `false`.
 
+## Market-aware research session admission
+
+After a reviewed market-aware release exists, build the read-only session admission
+report with explicit evaluation and reference times:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session \
+  --release-manifest reports/analysis-deepseek-001/release-replay/release/research_release_manifest.json \
+  --release-report reports/analysis-deepseek-001/release-replay/release/research_release_report.json \
+  --replay-report reports/analysis-deepseek-001/release-replay/market_aware_release_replay_report.json \
+  --calendar fixtures/market/calendar/sample.json \
+  --calendar-report reports/calendar_report.json \
+  --evaluation-at 2026-08-10T13:00:00+00:00 \
+  --reference-at 2026-08-12T12:00:00+00:00 \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session
+```
+
+The `market-aware-session-v1` report admits a session only when the release,
+review, v2 market summaries, and `research-freshness-v1` audit are all valid.
+`--reference-at` is explicit and required: an evaluation after it returns
+`TIME_IN_FUTURE`, while a release after the evaluation returns
+`RELEASE_AFTER_EVALUATION`; only then can an uncovered calendar produce
+`CALENDAR_UNKNOWN`. A ready session still keeps `decision_ready=false` and
+contains no trading instruction or authorization.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,

@@ -24,6 +24,11 @@ from .market_aware_replay import (
     MarketAwareReplayError,
     replay_market_aware_analysis,
 )
+from .market_aware_session import (
+    MARKET_AWARE_SESSION_VERSION,
+    MarketAwareSessionError,
+    build_market_aware_session,
+)
 from .market_aware_smoke import (
     MARKET_AWARE_SMOKE_VERSION,
     smoke_market_aware_analysis,
@@ -116,6 +121,9 @@ __all__ = [
     "MARKET_AWARE_RELEASE_REPLAY_VERSION",
     "MarketAwareReleaseReplayError",
     "replay_market_aware_release",
+    "MARKET_AWARE_SESSION_VERSION",
+    "MarketAwareSessionError",
+    "build_market_aware_session",
     "MARKET_AWARE_SMOKE_VERSION",
     "smoke_market_aware_analysis",
     "audit_analysis_safety",
