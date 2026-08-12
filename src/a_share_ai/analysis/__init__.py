@@ -29,6 +29,11 @@ from .market_aware_session import (
     MarketAwareSessionError,
     build_market_aware_session,
 )
+from .market_aware_session_history import (
+    MARKET_AWARE_SESSION_HISTORY_VERSION,
+    MarketAwareSessionHistoryError,
+    build_market_aware_session_history,
+)
 from .market_aware_session_package import (
     MARKET_AWARE_SESSION_PACKAGE_VERSION,
     MarketAwareSessionPackageError,
@@ -172,6 +177,9 @@ __all__ = [
     "MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_AUDIT_VERSION",
     "MarketAwareSessionPackageDiffRenderAuditError",
     "audit_market_aware_session_package_diff_render",
+    "MARKET_AWARE_SESSION_HISTORY_VERSION",
+    "MarketAwareSessionHistoryError",
+    "build_market_aware_session_history",
     "MARKET_AWARE_SMOKE_VERSION",
     "smoke_market_aware_analysis",
     "audit_analysis_safety",

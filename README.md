@@ -647,6 +647,25 @@ metadata, and comparison/render status. A blocked render can audit as
 complete while remaining blocked; `audit_ready` does not mean research
 validity or trading authorization, and `decision_ready` remains false.
 
+## Build a market-aware session history
+
+Compose explicit package references into a deterministic chronological history:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history \
+  --spec reports/session-history/session_history_spec.json \
+  --history-root reports/session-history \
+  --output-dir reports/session-history/history
+```
+
+The `market-aware-session-history-v1` spec contains at least two package
+manifest/report/artifact-root references, all relative to `history-root`. Each
+package is independently checked with the Node33 package audit; symbols must
+match and `as_of` values must be strictly increasing. Stale or blocked
+sessions remain visibly blocked in the history and are never upgraded to
+ready. The history is a file-based manifest only and keeps
+`decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
