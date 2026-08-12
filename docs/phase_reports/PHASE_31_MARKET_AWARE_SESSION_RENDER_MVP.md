@@ -13,6 +13,9 @@ paths that the session report does not contain.
 - CLI: `python -m a_share_ai.cli render-market-aware-session`.
 - Outputs: `market_aware_session.md` and
   `market_aware_session_render_report.json`.
+- The render report is self-contained for the session time and freshness
+  semantics and always includes `evaluation_at`, `freshness_status`, and
+  `freshness_ready` copied exactly from the session on valid inputs.
 - Every output keeps `decision_ready=false`.
 
 The renderer proves only what the current session contract exposes:

@@ -388,8 +388,11 @@ def _render_markdown(metadata: Mapping[str, Any]) -> bytes:
 def _base_report() -> dict[str, Any]:
     return {
         "decision_ready": False,
+        "evaluation_at": None,
         "freshness_report_path": None,
         "freshness_report_sha256": None,
+        "freshness_ready": False,
+        "freshness_status": "invalid",
         "issues": [],
         "output_sha256": None,
         "reference_at": None,
@@ -443,8 +446,11 @@ def render_market_aware_session(
         report.update(
             {
                 "as_of": session.get("as_of"),
+                "evaluation_at": session.get("evaluation_at"),
                 "freshness_report_path": metadata["freshness_report_path"],
                 "freshness_report_sha256": metadata["freshness_report_sha256"],
+                "freshness_ready": session.get("freshness_ready"),
+                "freshness_status": session.get("freshness_status"),
                 "output_sha256": sha256_bytes(markdown),
                 "reference_at": session.get("reference_at"),
                 "session_ready": session.get("session_ready"),

@@ -47,6 +47,9 @@ def test_ready_session_renders_deterministically(tmp_path: Path) -> None:
 
     assert first["session_render_ready"] is True
     assert first["status"] == "ready"
+    assert first["evaluation_at"] == "2026-08-10T13:00:00+00:00"
+    assert first["freshness_status"] == "fresh"
+    assert first["freshness_ready"] is True
     assert first["decision_ready"] is False
     assert first["freshness_report_sha256"] == sha256_bytes(inputs["freshness"].read_bytes())
     assert first["session_sha256"] == sha256_bytes(inputs["session"].read_bytes())
@@ -82,6 +85,9 @@ def test_stale_session_renders_blocked_markdown(tmp_path: Path) -> None:
     report = _render(stale_inputs, "render")
     assert report["session_render_ready"] is False
     assert report["status"] == "stale"
+    assert report["evaluation_at"] == "2026-08-11T08:00:00+00:00"
+    assert report["freshness_status"] == "stale"
+    assert report["freshness_ready"] is False
     assert report["freshness_report_sha256"] is not None
     markdown = (stale_inputs["artifact_root"] / "render" / "market_aware_session.md").read_text(
         encoding="utf-8"
@@ -101,6 +107,9 @@ def test_renderer_fails_closed_for_freshness_tamper_and_output_boundary(
 
     tampered = _render(inputs, "tampered-render")
     assert tampered["session_render_ready"] is False
+    assert "evaluation_at" in tampered
+    assert "freshness_status" in tampered
+    assert "freshness_ready" in tampered
     assert tampered["issues"][0]["code"] == "HASH_MISMATCH"
     assert not (inputs["artifact_root"] / "tampered-render" / "market_aware_session.md").exists()
 
