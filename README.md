@@ -729,6 +729,27 @@ time bounds, package literals, and `decision_ready=false` chain. It does not
 re-render or interpret the history; stale or blocked state remains literal,
 and `audit_ready` is only an artifact-integrity result.
 
+## Build a market-aware session history manifest
+
+Create a portable evidence manifest for the six Node37–40 history artifacts:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-manifest \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-audit-report reports/session-history/history-audit/market_aware_session_history_audit_report.json \
+  --markdown reports/session-history/history-render/market_aware_session_history.md \
+  --render-report reports/session-history/history-render/market_aware_session_history_render_report.json \
+  --render-audit-report reports/session-history/history-render-audit/market_aware_session_history_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest
+```
+
+The `market-aware-session-history-manifest-v1` output records fixed artifact
+roles, controlled relative paths, byte counts, SHA-256 values, readiness
+states, and `decision_ready=false`. It requires the Node40 render audit to be
+`audit_ready=true`, but does not rerun or reinterpret any upstream artifact.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
