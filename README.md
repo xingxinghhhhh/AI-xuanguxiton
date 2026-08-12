@@ -523,6 +523,27 @@ review, v2 market summaries, and `research-freshness-v1` audit are all valid.
 `CALENDAR_UNKNOWN`. A ready session still keeps `decision_ready=false` and
 contains no trading instruction or authorization.
 
+## Render a market-aware session report
+
+Render the session admission metadata as deterministic Markdown without another
+API call:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session \
+  --session reports/analysis-deepseek-001/session/market_aware_session.json \
+  --session-report reports/analysis-deepseek-001/session/market_aware_session_report.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session-render
+```
+
+The `market-aware-session-render-v1` renderer verifies the session/report
+fields, their actual SHA-256 values, the same-directory
+`research_freshness_report.json`, versions, status gates, time fields, and
+artifact-root boundaries. Release, bundle, and calendar hashes are shown as
+declared summaries only; the renderer does not infer upstream paths that the
+session contract does not contain. Blocked sessions may be rendered as blocked
+Markdown, but never as ready and always keep `decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
