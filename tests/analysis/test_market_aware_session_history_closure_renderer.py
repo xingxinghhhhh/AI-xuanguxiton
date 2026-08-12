@@ -81,6 +81,7 @@ def test_closure_render_is_ready_and_deterministic(tmp_path: Path) -> None:
         paths["root"] / "render-two" / "market_aware_session_history_closure.md"
     ).read_bytes()
     assert first_markdown == second_markdown
+    assert first["markdown_sha256"] == sha256_bytes(first_markdown)
     report_path = paths["root"] / "render-one" / (
         "market_aware_session_history_closure_render_report.json"
     )

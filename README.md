@@ -842,8 +842,27 @@ python -m a_share_ai.cli render-market-aware-session-history-closure \
 This writes `market_aware_session_history_closure.md` and
 `market_aware_session_history_closure_render_report.json`. The view only
 shows literal closure status, time bounds, readiness flags, evidence hashes,
-and issues; it never infers research quality, market trends, returns, or
+issues; the report also records the Markdown `markdown_sha256`. It never infers
+research quality, market trends, returns, or
 trading authorization. It always keeps `decision_ready=false`.
+
+## Audit the market-aware session history closure render
+
+Audit the Node46 Markdown and render report without re-rendering them:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-closure-render \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --markdown reports/session-history/history-closure-render/market_aware_session_history_closure.md \
+  --render-report reports/session-history/history-closure-render/market_aware_session_history_closure_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-render-audit
+```
+
+This writes `market_aware_session_history_closure_render_audit_report.json`.
+It verifies the Node45/46 path, SHA, state, metadata, UTF-8, and Markdown
+binding; it keeps `decision_ready=false` and does not infer a trading result.
 
 ## Compare two research releases
 

@@ -17,8 +17,9 @@ upstream evidence files.
 
 The renderer validates Node45 JSON versions, canonical self-hashes, the
 closure SHA binding, controlled input metadata, state and issue consistency,
-and `decision_ready=false`. It renders only literal closure fields, evidence
-hashes, and issue messages with Markdown/HTML/link/code-fence escaping.
+and `decision_ready=false`. Its report records `markdown_sha256` for the
+rendered bytes. It renders only literal closure fields, evidence hashes, and
+issue messages with Markdown/HTML/link/code-fence escaping.
 `ready` closures produce `render_ready=true`; valid `blocked` or `stale`
 closures remain visibly blocked and never become ready.
 

@@ -401,7 +401,8 @@ def render_market_aware_session_history_closure(
             closure_report=closure_report,
             root=root,
         )
-        write_atomic(markdown_path, _render_markdown(metadata))
+        markdown = _render_markdown(metadata)
+        write_atomic(markdown_path, markdown)
         report.update(
             {
                 "closure_path": files["closure"]["relative_path"],
@@ -413,6 +414,7 @@ def render_market_aware_session_history_closure(
                 "first_as_of": closure.get("first_as_of"),
                 "issues": list(closure.get("issues") or []),
                 "last_as_of": closure.get("last_as_of"),
+                "markdown_sha256": sha256_bytes(markdown),
                 "package_count": closure.get("package_count"),
                 "render_ready": metadata["closure_ready"],
                 "status": metadata["status"],
