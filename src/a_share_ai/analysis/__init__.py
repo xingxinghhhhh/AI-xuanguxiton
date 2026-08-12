@@ -44,6 +44,11 @@ from .market_aware_session_package_diff import (
     MarketAwareSessionPackageDiffError,
     compare_market_aware_session_packages,
 )
+from .market_aware_session_package_diff_render_audit import (
+    MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_AUDIT_VERSION,
+    MarketAwareSessionPackageDiffRenderAuditError,
+    audit_market_aware_session_package_diff_render,
+)
 from .market_aware_session_package_diff_renderer import (
     MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_VERSION,
     MarketAwareSessionPackageDiffRenderError,
@@ -164,6 +169,9 @@ __all__ = [
     "MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_VERSION",
     "MarketAwareSessionPackageDiffRenderError",
     "render_market_aware_session_package_diff",
+    "MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_AUDIT_VERSION",
+    "MarketAwareSessionPackageDiffRenderAuditError",
+    "audit_market_aware_session_package_diff_render",
     "MARKET_AWARE_SMOKE_VERSION",
     "smoke_market_aware_analysis",
     "audit_analysis_safety",

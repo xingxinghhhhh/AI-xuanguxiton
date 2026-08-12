@@ -627,6 +627,26 @@ keeps `decision_ready=false`. It is a safe Markdown view only: it does not
 judge market direction, predict returns, or create an investment or trading
 instruction.
 
+## Audit a rendered market-aware session package diff
+
+Independently verify the Node35 diff JSON, report, Markdown, and render report:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-package-diff-render \
+  --diff reports/current/session-package-diff/market_aware_session_package_diff.json \
+  --diff-report reports/current/session-package-diff/market_aware_session_package_diff_report.json \
+  --markdown reports/current/session-package-diff-render/market_aware_session_package_diff.md \
+  --render-report reports/current/session-package-diff-render/market_aware_session_package_diff_render_report.json \
+  --artifact-root reports/current \
+  --output-dir reports/current/session-package-diff-render-audit
+```
+
+The `market-aware-session-package-diff-render-audit-v1` report independently
+checks versions, relative paths, byte sizes, SHA-256 bindings, symbol/time
+metadata, and comparison/render status. A blocked render can audit as
+complete while remaining blocked; `audit_ready` does not mean research
+validity or trading authorization, and `decision_ready` remains false.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
