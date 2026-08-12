@@ -886,6 +886,26 @@ flag means only that the existing offline evidence chain passed its literal
 gates; it is not a research conclusion, investment decision, or trading
 authorization. It always keeps `decision_ready=false`.
 
+## Audit the market-aware session history closure admission
+
+Audit the Node48 admission and all of its declared evidence bindings:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-closure-admission \
+  --admission reports/session-history/history-closure-admission/market_aware_session_history_closure_admission.json \
+  --admission-report reports/session-history/history-closure-admission/market_aware_session_history_closure_admission_report.json \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --markdown reports/session-history/history-closure-render/market_aware_session_history_closure.md \
+  --render-report reports/session-history/history-closure-render/market_aware_session_history_closure_render_report.json \
+  --render-audit-report reports/session-history/history-closure-render-audit/market_aware_session_history_closure_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-admission-audit
+```
+
+This writes `market_aware_session_history_closure_admission_audit_report.json`.
+It is a read-only integrity audit and always keeps `decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
