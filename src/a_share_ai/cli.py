@@ -14,6 +14,7 @@ from .analysis.market_aware_replay import replay_market_aware_analysis
 from .analysis.market_aware_session import build_market_aware_session
 from .analysis.market_aware_session_package import build_market_aware_session_package
 from .analysis.market_aware_session_package_audit import audit_market_aware_session_package
+from .analysis.market_aware_session_package_diff import compare_market_aware_session_packages
 from .analysis.market_aware_session_renderer import render_market_aware_session
 from .analysis.market_aware_smoke import smoke_market_aware_analysis
 from .analysis.quality import audit_analysis_quality
@@ -283,6 +284,28 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     market_aware_session_package_audit.add_argument("--artifact-root", type=Path, required=True)
     market_aware_session_package_audit.add_argument("--output-dir", type=Path, required=True)
+
+    market_aware_session_package_diff = subparsers.add_parser(
+        "compare-market-aware-session-packages",
+        help="compare two independently audited market-aware session packages",
+    )
+    market_aware_session_package_diff.add_argument(
+        "--previous-package", type=Path, required=True
+    )
+    market_aware_session_package_diff.add_argument(
+        "--previous-package-report", type=Path, required=True
+    )
+    market_aware_session_package_diff.add_argument(
+        "--previous-artifact-root", type=Path, required=True
+    )
+    market_aware_session_package_diff.add_argument("--current-package", type=Path, required=True)
+    market_aware_session_package_diff.add_argument(
+        "--current-package-report", type=Path, required=True
+    )
+    market_aware_session_package_diff.add_argument(
+        "--current-artifact-root", type=Path, required=True
+    )
+    market_aware_session_package_diff.add_argument("--output-dir", type=Path, required=True)
 
     renderer = subparsers.add_parser(
         "render-analysis", help="render a validated analysis report as Markdown"
@@ -952,6 +975,20 @@ def run_market_aware_session_package_audit(args: argparse.Namespace) -> int:
     return 0 if report.get("audit_ready") is True else 1
 
 
+def run_market_aware_session_package_diff(args: argparse.Namespace) -> int:
+    report = compare_market_aware_session_packages(
+        previous_package_path=args.previous_package,
+        previous_package_report_path=args.previous_package_report,
+        previous_artifact_root=args.previous_artifact_root,
+        current_package_path=args.current_package,
+        current_package_report_path=args.current_package_report,
+        current_artifact_root=args.current_artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("comparison_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -1113,6 +1150,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_market_aware_session_package(args)
     if args.command == "audit-market-aware-session-package":
         return run_market_aware_session_package_audit(args)
+    if args.command == "compare-market-aware-session-packages":
+        return run_market_aware_session_package_diff(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":

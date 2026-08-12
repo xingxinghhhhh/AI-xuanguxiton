@@ -588,6 +588,27 @@ audit means package integrity only: a stale or blocked package can have
 `decision_ready=false`. The audit report is written only when its output
 directory is inside `artifact-root`.
 
+## Compare two market-aware session packages
+
+Compare two packages that have each passed the independent Node33 audit:
+
+```bash
+python -m a_share_ai.cli compare-market-aware-session-packages \
+  --previous-package reports/previous/session-package/market_aware_session_package.json \
+  --previous-package-report reports/previous/session-package/market_aware_session_package_report.json \
+  --previous-artifact-root reports/previous \
+  --current-package reports/current/session-package/market_aware_session_package.json \
+  --current-package-report reports/current/session-package/market_aware_session_package_report.json \
+  --current-artifact-root reports/current \
+  --output-dir reports/current/session-package-diff
+```
+
+The `market-aware-session-package-diff-v1` outputs report literal changes in
+session/package fields and the five artifact roles' relative paths, byte
+sizes, and SHA-256 values. The symbols must match and the current `as_of` must
+be later. This is a structural diff only; it keeps `decision_ready=false` and
+does not infer whether any change is favorable or actionable.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
