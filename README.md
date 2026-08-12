@@ -827,6 +827,24 @@ evidence-chain status, time bounds, readiness flags, controlled input paths,
 and SHA-256 values. It does not add research or trading semantics and always
 keeps `decision_ready=false`.
 
+## Render the market-aware session history closure
+
+Render the Node45 closure as a deterministic, read-only Markdown view:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-history-closure \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-render
+```
+
+This writes `market_aware_session_history_closure.md` and
+`market_aware_session_history_closure_render_report.json`. The view only
+shows literal closure status, time bounds, readiness flags, evidence hashes,
+and issues; it never infers research quality, market trends, returns, or
+trading authorization. It always keeps `decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
