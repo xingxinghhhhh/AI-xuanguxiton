@@ -864,6 +864,28 @@ This writes `market_aware_session_history_closure_render_audit_report.json`.
 It verifies the Node45/46 path, SHA, state, metadata, UTF-8, and Markdown
 binding; it keeps `decision_ready=false` and does not infer a trading result.
 
+## Build the market-aware session history closure admission
+
+Create one deterministic read-only admission summary from the Node45–47
+evidence chain:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-closure-admission \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --markdown reports/session-history/history-closure-render/market_aware_session_history_closure.md \
+  --render-report reports/session-history/history-closure-render/market_aware_session_history_closure_render_report.json \
+  --render-audit-report reports/session-history/history-closure-render-audit/market_aware_session_history_closure_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-admission
+```
+
+This writes `market_aware_session_history_closure_admission.json` and
+`market_aware_session_history_closure_admission_report.json`. The admission
+flag means only that the existing offline evidence chain passed its literal
+gates; it is not a research conclusion, investment decision, or trading
+authorization. It always keeps `decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
