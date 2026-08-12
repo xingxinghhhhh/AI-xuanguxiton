@@ -544,6 +544,29 @@ declared summaries only; the renderer does not infer upstream paths that the
 session contract does not contain. Blocked sessions may be rendered as blocked
 Markdown, but never as ready and always keep `decision_ready=false`.
 
+## Build a market-aware session audit package
+
+Package the session admission and rendering artifacts into a deterministic,
+relative-path manifest for offline handoff and later verification:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-package \
+  --session reports/analysis-deepseek-001/session/market_aware_session.json \
+  --session-report reports/analysis-deepseek-001/session/market_aware_session_report.json \
+  --freshness-report reports/analysis-deepseek-001/session/research_freshness_report.json \
+  --session-markdown reports/analysis-deepseek-001/session-render/market_aware_session.md \
+  --session-render-report reports/analysis-deepseek-001/session-render/market_aware_session_render_report.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session-package
+```
+
+The `market-aware-session-package-v1` manifest records five fixed artifact
+roles, relative paths, byte sizes, and actual SHA-256 values. It also records
+the session status and time summary. Blocked sessions may be packaged, but
+`package_ready` and `session_ready` remain distinct and
+`decision_ready=false` always. Declared release, bundle, and calendar hashes
+remain summaries only; no missing upstream path is inferred.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
