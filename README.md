@@ -666,6 +666,25 @@ sessions remain visibly blocked in the history and are never upgraded to
 ready. The history is a file-based manifest only and keeps
 `decision_ready=false`.
 
+## Audit a market-aware session history
+
+Independently verify a history manifest, its report, and every referenced
+package:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-root reports/session-history \
+  --output-dir reports/session-history/history-audit
+```
+
+The `market-aware-session-history-audit-v1` report reuses the Node33 package
+audit and checks history/report hashes, relative references, package SHA and
+state bindings, symbols, freshness, and strict `as_of` ordering. It verifies
+integrity only: stale or blocked sessions remain blocked and
+`decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
