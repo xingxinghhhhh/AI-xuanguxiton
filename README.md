@@ -609,6 +609,24 @@ sizes, and SHA-256 values. The symbols must match and the current `as_of` must
 be later. This is a structural diff only; it keeps `decision_ready=false` and
 does not infer whether any change is favorable or actionable.
 
+## Render a market-aware session package diff
+
+Render the Node34 structural diff for readable, offline handoff:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-package-diff \
+  --diff reports/current/session-package-diff/market_aware_session_package_diff.json \
+  --diff-report reports/current/session-package-diff/market_aware_session_package_diff_report.json \
+  --input-root reports/current \
+  --output-dir reports/current/session-package-diff-render
+```
+
+The `market-aware-session-package-diff-render-v1` output shows literal field
+and five-artifact changes, validates the Node34 diff/report SHA binding, and
+keeps `decision_ready=false`. It is a safe Markdown view only: it does not
+judge market direction, predict returns, or create an investment or trading
+instruction.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
