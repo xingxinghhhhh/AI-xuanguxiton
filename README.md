@@ -707,6 +707,28 @@ are true. This is a read-only status view: it does not infer market trends,
 returns, investment value, or trading authorization, and always keeps
 `decision_ready=false`.
 
+## Audit a rendered market-aware session history
+
+Independently verify the Node39 Markdown render and its report against the
+Node37 history and Node38 history audit:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-render \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-audit-report reports/session-history/history-audit/market_aware_session_history_audit_report.json \
+  --markdown reports/session-history/history-render/market_aware_session_history.md \
+  --render-report reports/session-history/history-render/market_aware_session_history_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-render-audit
+```
+
+The `market-aware-session-history-render-audit-v1` report checks the five
+input files' actual paths, sizes, SHA-256 values, versions, status fields,
+time bounds, package literals, and `decision_ready=false` chain. It does not
+re-render or interpret the history; stale or blocked state remains literal,
+and `audit_ready` is only an artifact-integrity result.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
