@@ -14,6 +14,9 @@ from .analysis.market_aware_replay import replay_market_aware_analysis
 from .analysis.market_aware_session import build_market_aware_session
 from .analysis.market_aware_session_history import build_market_aware_session_history
 from .analysis.market_aware_session_history_audit import audit_market_aware_session_history
+from .analysis.market_aware_session_history_closure import (
+    build_market_aware_session_history_closure,
+)
 from .analysis.market_aware_session_history_manifest import (
     build_market_aware_session_history_manifest,
 )
@@ -523,6 +526,32 @@ def _build_parser() -> argparse.ArgumentParser:
         "--artifact-root", type=Path, required=True
     )
     market_aware_session_history_manifest_render_audit.add_argument(
+        "--output-dir", type=Path, required=True
+    )
+
+    market_aware_session_history_closure = subparsers.add_parser(
+        "build-market-aware-session-history-closure",
+        help="build a market-aware session history closure report",
+    )
+    market_aware_session_history_closure.add_argument(
+        "--manifest", type=Path, required=True
+    )
+    market_aware_session_history_closure.add_argument(
+        "--manifest-report", type=Path, required=True
+    )
+    market_aware_session_history_closure.add_argument(
+        "--manifest-audit-report", type=Path, required=True
+    )
+    market_aware_session_history_closure.add_argument(
+        "--render-report", type=Path, required=True
+    )
+    market_aware_session_history_closure.add_argument(
+        "--render-audit-report", type=Path, required=True
+    )
+    market_aware_session_history_closure.add_argument(
+        "--artifact-root", type=Path, required=True
+    )
+    market_aware_session_history_closure.add_argument(
         "--output-dir", type=Path, required=True
     )
 
@@ -1333,6 +1362,20 @@ def run_market_aware_session_history_manifest_render_audit(
     return 0 if report.get("audit_ready") is True else 1
 
 
+def run_market_aware_session_history_closure(args: argparse.Namespace) -> int:
+    report = build_market_aware_session_history_closure(
+        manifest_path=args.manifest,
+        manifest_report_path=args.manifest_report,
+        manifest_audit_report_path=args.manifest_audit_report,
+        render_report_path=args.render_report,
+        render_audit_report_path=args.render_audit_report,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("closure_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -1516,6 +1559,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_market_aware_session_history_manifest_renderer(args)
     if args.command == "audit-market-aware-session-history-manifest-render":
         return run_market_aware_session_history_manifest_render_audit(args)
+    if args.command == "build-market-aware-session-history-closure":
+        return run_market_aware_session_history_closure(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":

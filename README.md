@@ -807,6 +807,26 @@ paths, versions, canonical report hashes, SHA bindings, six artifact roles,
 Markdown SHA, and readiness fields without re-rendering or re-auditing the
 inputs. It always keeps `decision_ready=false`.
 
+## Close the market-aware session history evidence chain
+
+Generate a deterministic closure status from the Node41–44 reports:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-closure \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --manifest-audit-report reports/session-history/history-manifest-audit/market_aware_session_history_manifest_audit_report.json \
+  --render-report reports/session-history/history-manifest-render/market_aware_session_history_manifest_render_report.json \
+  --render-audit-report reports/session-history/history-manifest-render-audit/market_aware_session_history_manifest_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure
+```
+
+The `market-aware-session-history-closure-v1` output records only the
+evidence-chain status, time bounds, readiness flags, controlled input paths,
+and SHA-256 values. It does not add research or trading semantics and always
+keeps `decision_ready=false`.
+
 ## Compare two research releases
 
 To inspect what changed between two completed single-stock research packages,
