@@ -987,3 +987,35 @@ changes are reported separately. The command rejects time reversal, symbol or
 SHA mismatches, path escapes, incomplete reviews, unverified evidence, and
 transaction fields. It never performs semantic good/bad analysis and always
 keeps `decision_ready=false`.
+
+## Run the read-only research receipt service
+
+Node53 provides a small standard-library HTTP boundary for an already validated
+Node52 final receipt. It reads only the receipt and its report, binds to
+`127.0.0.1` by default, and never rebuilds the evidence chain or calls an
+external provider:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --receipt reports/session-history/final-receipt/market_aware_session_history_final_receipt.json \
+  --receipt-report reports/session-history/final-receipt/market_aware_session_history_final_receipt_report.json \
+  --artifact-root reports/session-history \
+  --host 127.0.0.1 \
+  --port 8765
+```
+
+The process refuses to listen when either input is outside `--artifact-root`,
+has invalid JSON or self-hashes, has a mismatched receipt SHA, disagrees on
+status/readiness metadata, or sets `decision_ready` to true. The read-only
+routes are:
+
+- `GET /healthz`: process and receipt are loaded; returns HTTP 200.
+- `GET /readyz`: returns HTTP 200 only when `receipt_ready=true`, otherwise
+  HTTP 503 for a valid stale or blocked receipt.
+- `GET /v1/research/receipt`: returns a fixed summary without local paths or
+  source files.
+
+Only `127.0.0.1` and `::1` are accepted as hosts. This is an operator-facing
+local service boundary, not an authenticated public deployment, database,
+scheduler, trading API, or investment recommendation service. Every response
+keeps `decision_ready=false`.

@@ -104,6 +104,12 @@ from .market.coverage import CoverageReport, audit_daily_coverage
 from .market.health import HealthReport, ValidationIssue, build_health_report
 from .market.market_context import INDEX_SYMBOLS, MARKET_CONTEXT_VERSION, MarketContextConfig
 from .market.replay import canonical_jsonl, sha256_bytes, write_atomic
+from .service.read_only_receipt_server import (
+    DEFAULT_READ_ONLY_RECEIPT_HOST,
+    DEFAULT_READ_ONLY_RECEIPT_PORT,
+    ReadOnlyReceiptServiceError,
+    serve_read_only_receipt,
+)
 
 
 def _parse_as_of(value: str) -> datetime:
@@ -741,6 +747,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     market_aware_session_history_final_receipt.add_argument(
         "--output-dir", type=Path, required=True
+    )
+
+    receipt_service = subparsers.add_parser(
+        "serve-research-receipt",
+        help="serve a validated research receipt over loopback HTTP",
+    )
+    receipt_service.add_argument("--receipt", type=Path, required=True)
+    receipt_service.add_argument("--receipt-report", type=Path, required=True)
+    receipt_service.add_argument("--artifact-root", type=Path, required=True)
+    receipt_service.add_argument(
+        "--host",
+        choices=("127.0.0.1", "::1"),
+        default=DEFAULT_READ_ONLY_RECEIPT_HOST,
+    )
+    receipt_service.add_argument(
+        "--port", type=int, default=DEFAULT_READ_ONLY_RECEIPT_PORT
     )
 
     renderer = subparsers.add_parser(
@@ -1671,6 +1693,23 @@ def run_market_aware_session_history_final_receipt(
     return 0 if report.get("receipt_ready") is True else 1
 
 
+def run_read_only_receipt_server(args: argparse.Namespace) -> int:
+    try:
+        serve_read_only_receipt(
+            receipt_path=args.receipt,
+            receipt_report_path=args.receipt_report,
+            artifact_root=args.artifact_root,
+            host=args.host,
+            port=args.port,
+        )
+    except ReadOnlyReceiptServiceError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        return 0
+    return 0
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -1870,6 +1909,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_market_aware_session_history_closure_admission_render_audit(args)
     if args.command == "build-market-aware-session-history-final-receipt":
         return run_market_aware_session_history_final_receipt(args)
+    if args.command == "serve-research-receipt":
+        return run_read_only_receipt_server(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":
