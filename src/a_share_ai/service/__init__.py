@@ -1,5 +1,12 @@
 """Small, read-only service entry points for the A-share system."""
 
+from .daily_research_service_probe import (
+    DAILY_RESEARCH_SERVICE_PROBE_VERSION,
+    DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
+    DailyResearchServiceProbeError,
+    daily_research_service_probe_exit_code,
+    probe_daily_research_service,
+)
 from .launch_config import (
     READ_ONLY_RECEIPT_SERVICE_LAUNCH_VERSION,
     ReadOnlyReceiptLaunchConfig,
@@ -24,6 +31,11 @@ from .read_only_receipt_server import (
 )
 
 __all__ = [
+    "DAILY_RESEARCH_SERVICE_PROBE_VERSION",
+    "DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS",
+    "DailyResearchServiceProbeError",
+    "probe_daily_research_service",
+    "daily_research_service_probe_exit_code",
     "READ_ONLY_RECEIPT_SERVICE_VERSION",
     "ReadOnlyReceiptServiceError",
     "create_read_only_receipt_server",

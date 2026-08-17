@@ -107,6 +107,12 @@ from .market.replay import canonical_jsonl, sha256_bytes, write_atomic
 from .runtime.daily_research_admission import build_daily_research_admission
 from .runtime.daily_research_run import DailyResearchRunError, run_daily_research
 from .runtime.daily_research_run_audit import audit_daily_research_run
+from .service.daily_research_service_probe import (
+    DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
+    DailyResearchServiceProbeError,
+    daily_research_service_probe_exit_code,
+    probe_daily_research_service,
+)
 from .service.launch_config import (
     ReadOnlyReceiptLaunchError,
     check_read_only_receipt_launch,
@@ -770,6 +776,15 @@ def _build_parser() -> argparse.ArgumentParser:
     receipt_probe.add_argument("--base-url", required=True)
     receipt_probe.add_argument(
         "--timeout-seconds", type=float, default=DEFAULT_PROBE_TIMEOUT_SECONDS
+    )
+
+    daily_service_probe = subparsers.add_parser(
+        "probe-daily-research-service",
+        help="probe a loopback daily research admission service",
+    )
+    daily_service_probe.add_argument("--base-url", required=True)
+    daily_service_probe.add_argument(
+        "--timeout-seconds", type=float, default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS
     )
 
     renderer = subparsers.add_parser(
@@ -1860,6 +1875,30 @@ def run_read_only_receipt_probe(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def run_daily_research_service_probe(args: argparse.Namespace) -> int:
+    try:
+        report = probe_daily_research_service(
+            base_url=args.base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
+        exit_code = daily_research_service_probe_exit_code(report)
+    except DailyResearchServiceProbeError as exc:
+        report = {
+            "probe_version": "daily-research-service-probe-v1",
+            "status": "invalid",
+            "health_status": None,
+            "ready_status": None,
+            "receipt_status": None,
+            "daily_admission_status": None,
+            "daily_admission_ready": None,
+            "decision_ready": None,
+            "issues": [{"code": exc.code, "message": str(exc)}],
+        }
+        exit_code = 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -2069,6 +2108,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_read_only_receipt_server(args)
     if args.command == "probe-research-receipt-service":
         return run_read_only_receipt_probe(args)
+    if args.command == "probe-daily-research-service":
+        return run_daily_research_service_probe(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":
