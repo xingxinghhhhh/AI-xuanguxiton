@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import urllib.error
 import urllib.request
@@ -41,7 +42,7 @@ _DAILY_FIELDS = {
     "decision_ready",
 }
 _DAILY_STATUSES = {"ready", "stale", "calendar_unknown", "blocked", "invalid"}
-_ABSOLUTE_PATH_RE = re.compile(r"(?i)(?:\b[A-Z]:[\\/]|(?:^|\s)/)")
+_ABSOLUTE_PATH_RE = re.compile(r"(?i)(?:\b[A-Z]:[\\/]|(?:^|\s)/|\\\\)")
 
 
 class DailyResearchServiceProbeError(ValueError):
@@ -93,7 +94,7 @@ def _base_report() -> dict[str, Any]:
         "receipt_status": None,
         "daily_admission_status": None,
         "daily_admission_ready": None,
-        "decision_ready": None,
+        "decision_ready": False,
         "issues": [],
     }
 
@@ -254,7 +255,12 @@ def probe_daily_research_service(
     """Probe all four Node59 GET routes and return a deterministic report."""
 
     normalized_url = _normalize_base_url(base_url)
-    if timeout_seconds <= 0:
+    if (
+        isinstance(timeout_seconds, bool)
+        or not isinstance(timeout_seconds, (int, float))
+        or not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+    ):
         raise DailyResearchServiceProbeError("TIMEOUT_INVALID", "timeout-seconds must be positive")
     report = _base_report()
     opener = urllib.request.build_opener(
@@ -294,6 +300,10 @@ def probe_daily_research_service(
         _expect_status("daily admission", daily_status, 200)
         daily = _validate_daily_summary(daily_raw)
         report["daily_admission_ready"] = daily["admission_ready"]
+        if daily["symbol"] != health["symbol"]:
+            raise DailyResearchServiceProbeError(
+                "RESPONSE_MISMATCH", "daily admission symbol differs from receipt symbol"
+            )
         if daily["admission_ready"] and not health["receipt_ready"]:
             report["status"] = "blocked"
         elif not daily["admission_ready"] and health["receipt_ready"]:

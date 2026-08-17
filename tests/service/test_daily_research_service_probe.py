@@ -158,6 +158,52 @@ def test_probe_rejects_daily_unknown_fields_and_sensitive_output() -> None:
         server.server_close()
 
 
+def test_probe_rejects_daily_symbol_mismatch_and_unc_path() -> None:
+    receipt = _receipt_payload()
+    daily = _daily_payload()
+    daily["symbol"] = "000001.SZ"
+    server, thread, base_url = _start_fake_routes(
+        {
+            "/healthz": (200, receipt),
+            "/readyz": (200, receipt),
+            "/v1/research/receipt": (200, receipt),
+            "/v1/research/daily-admission": (200, daily),
+        }
+    )
+    try:
+        report = probe_daily_research_service(base_url=base_url)
+        assert report["issues"] == [
+            {
+                "code": "RESPONSE_MISMATCH",
+                "message": "daily admission symbol differs from receipt symbol",
+            }
+        ]
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+    daily = _daily_payload()
+    daily["issues"] = [{"code": "LEAK", "message": r"\\server\share\file"}]
+    server, thread, base_url = _start_fake_routes(
+        {
+            "/healthz": (200, receipt),
+            "/readyz": (200, receipt),
+            "/v1/research/receipt": (200, receipt),
+            "/v1/research/daily-admission": (200, daily),
+        }
+    )
+    try:
+        report = probe_daily_research_service(base_url=base_url)
+        assert report["issues"] == [
+            {"code": "SENSITIVE_OUTPUT", "message": "daily admission response contains a path"}
+        ]
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -170,6 +216,22 @@ def test_probe_rejects_daily_unknown_fields_and_sensitive_output() -> None:
 def test_probe_rejects_non_loopback_urls(url: str) -> None:
     with pytest.raises(DailyResearchServiceProbeError, match="base URL"):
         probe_daily_research_service(base_url=url)
+
+
+@pytest.mark.parametrize("timeout_seconds", [0, -1, float("nan"), float("inf"), float("-inf")])
+def test_probe_rejects_non_positive_or_non_finite_timeout(timeout_seconds: float) -> None:
+    with pytest.raises(DailyResearchServiceProbeError, match="timeout-seconds"):
+        probe_daily_research_service(
+            base_url="http://127.0.0.1:8765", timeout_seconds=timeout_seconds
+        )
+
+
+def test_probe_failure_report_keeps_decision_gate_false() -> None:
+    report = probe_daily_research_service(
+        base_url=f"http://127.0.0.1:{_free_port()}", timeout_seconds=0.1
+    )
+    assert report["status"] == "invalid"
+    assert report["decision_ready"] is False
 
 
 def test_probe_cli_runs_against_node59_daily_service(tmp_path: Path) -> None:

@@ -1891,7 +1891,7 @@ def run_daily_research_service_probe(args: argparse.Namespace) -> int:
             "receipt_status": None,
             "daily_admission_status": None,
             "daily_admission_ready": None,
-            "decision_ready": None,
+            "decision_ready": False,
             "issues": [{"code": exc.code, "message": str(exc)}],
         }
         exit_code = 2
