@@ -1,4 +1,6 @@
 import json
+import shutil
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -6,6 +8,13 @@ from typing import Any
 import pytest
 
 import a_share_ai.runtime.daily_research_run as runtime
+from a_share_ai.market.contracts import DailyBar
+from a_share_ai.market.market_context import (
+    INDEX_SYMBOLS,
+    MarketIndexRecord,
+    write_market_context,
+)
+from a_share_ai.market.replay import canonical_jsonl, sha256_bytes
 from a_share_ai.runtime.daily_research_run import (
     DAILY_RESEARCH_RUN_VERSION,
     DailyResearchRunError,
@@ -318,6 +327,172 @@ def test_real_analysis_input_builder_accepts_runtime_health_source(tmp_path: Pat
         (tmp_path / "bundle" / "analysis_input_bundle.json").read_text(encoding="utf-8")
     )
     assert bundle["bundle_version"] == "analysis-input-v2"
+
+
+def test_real_run_reaches_v2_bundle_with_only_external_sources_fake(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.evidence.test_analysis_input_bundle import build_artifacts
+
+    root = tmp_path / "input"
+    spec_path = _write_spec(root)
+    end = date(2026, 8, 7)
+    dates: list[date] = []
+    cursor = end
+    while len(dates) < 65:
+        if cursor.weekday() < 5:
+            dates.append(cursor)
+        cursor -= timedelta(days=1)
+    dates.sort()
+    payload = json.loads(spec_path.read_text(encoding="utf-8"))
+    payload.update(
+        start_date=dates[0].isoformat(),
+        end_date=dates[-1].isoformat(),
+        announcement_start=dates[0].isoformat(),
+        announcement_end=dates[-1].isoformat(),
+    )
+    spec_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    _write_json(
+        root / "market/calendar.json",
+        {
+            "schema_version": "1.0",
+            "calendar_version": "integration-v1",
+            "market": "CN-A",
+            "timezone": "Asia/Shanghai",
+            "covered_start": dates[0].isoformat(),
+            "covered_end": dates[-1].isoformat(),
+            "trading_dates": [day.isoformat() for day in dates],
+        },
+    )
+    template = tmp_path / "template"
+    build_artifacts(template)
+
+    class _IntegrationDailySource:
+        def __init__(self, config: Any) -> None:
+            self.config = config
+
+        def capture(self, output_dir: Path) -> dict[str, Any]:
+            bars = [
+                DailyBar.from_mapping(
+                    {
+                        "schema_version": "1.0",
+                        "symbol": "600000.SH",
+                        "trade_date": day.isoformat(),
+                        "open": "10.00",
+                        "high": "11.00" if index == 55 else "10.40",
+                        "low": "9.80",
+                        "close": "10.00",
+                        "volume": str(1_000_000 + index),
+                        "amount": str(10_200_000 + index),
+                        "source": "fixture",
+                        "market_time": f"{day.isoformat()}T15:00:00+08:00",
+                        "received_at": "2026-08-10T12:00:00+00:00",
+                        "data_status": "connected",
+                    }
+                )
+                for index, day in enumerate(dates)
+            ]
+            normalized = canonical_jsonl(bars)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "request.json").write_text("{}\n", encoding="utf-8")
+            (output_dir / "raw_response.json").write_text("{}\n", encoding="utf-8")
+            (output_dir / "normalized_daily.jsonl").write_bytes(normalized)
+            _write_json(
+                output_dir / "capture_report.json",
+                {"bar_count": len(bars), "error": None, "decision_ready": False},
+            )
+            return {"bar_count": len(bars), "error": None, "decision_ready": False}
+
+    class _IntegrationMarketContextSource:
+        def __init__(self, config: Any) -> None:
+            self.config = config
+
+        def capture(self, *, calendar_path: Path, output_dir: Path) -> dict[str, Any]:
+            calendar = runtime.JsonTradingCalendarSource(calendar_path).load_calendar()
+            records = [
+                MarketIndexRecord(
+                    symbol=symbol,
+                    trade_date=day,
+                    open=100,
+                    high=101,
+                    low=99,
+                    close=100,
+                    volume=1000,
+                    amount=100000,
+                    source="fixture",
+                    market_time=datetime.fromisoformat(f"{day.isoformat()}T15:00:00+08:00"),
+                    received_at=datetime.fromisoformat("2026-08-10T12:00:00+00:00"),
+                )
+                for symbol in INDEX_SYMBOLS
+                for index, day in enumerate(dates)
+            ]
+            return write_market_context(
+                config=self.config,
+                calendar=calendar,
+                calendar_sha256=sha256_bytes(calendar_path.read_bytes()),
+                records=records,
+                request=self.config.request_mapping(),
+                raw_response={"fixture": True},
+                output_dir=output_dir,
+            )
+
+    class _IntegrationCopySource:
+        source_dir: Path
+        report_name: str
+        snapshot_name: str
+        ready_field: str
+
+        def __init__(self, config: Any) -> None:
+            self.config = config
+
+        def capture(self, output_dir: Path) -> dict[str, Any]:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            for source in self.source_dir.iterdir():
+                if source.is_file():
+                    shutil.copyfile(source, output_dir / source.name)
+            return json.loads((output_dir / self.report_name).read_text(encoding="utf-8"))
+
+    class _IntegrationProfitabilitySource(_IntegrationCopySource):
+        source_dir = template / "fundamentals" / "profitability"
+        report_name = "profitability_report.json"
+        snapshot_name = "profitability_snapshot.json"
+        ready_field = "fundamental_ready"
+
+    class _IntegrationGrowthSource(_IntegrationCopySource):
+        source_dir = template / "fundamentals" / "growth"
+        report_name = "growth_report.json"
+        snapshot_name = "growth_snapshot.json"
+        ready_field = "growth_ready"
+
+    class _IntegrationAnnouncementsSource(_IntegrationCopySource):
+        source_dir = template / "events"
+        report_name = "announcements_report.json"
+        snapshot_name = "announcements_snapshot.json"
+        ready_field = "announcement_ready"
+
+    monkeypatch.setattr(runtime, "BaostockDailySource", _IntegrationDailySource)
+    monkeypatch.setattr(runtime, "BaostockMarketContextSource", _IntegrationMarketContextSource)
+    monkeypatch.setattr(runtime, "BaostockProfitabilitySource", _IntegrationProfitabilitySource)
+    monkeypatch.setattr(runtime, "BaostockGrowthSource", _IntegrationGrowthSource)
+    monkeypatch.setattr(runtime, "CninfoAnnouncementSource", _IntegrationAnnouncementsSource)
+
+    report = run_daily_research(
+        spec_path=spec_path,
+        input_root=root,
+        output_dir=root / "run",
+        source_mode="public-read-only",
+    )
+
+    assert report["status"] == "ready", json.dumps(report, ensure_ascii=False)
+    assert report["analysis_input_ready"] is True
+    assert report["market_context_summary_version"] == "market-context-summary-v1"
+    assert report["relative_strength_version"] == "relative-strength-v1"
+    assert report["decision_ready"] is False
+    bundle = json.loads(
+        (root / "run/analysis-input/analysis_input_bundle.json").read_text(encoding="utf-8")
+    )
+    assert bundle["bundle_version"] == "analysis-input-v2"
+    assert bundle["decision_ready"] is False
 
 
 def test_cli_invalid_spec_returns_parameter_error(tmp_path: Path) -> None:
