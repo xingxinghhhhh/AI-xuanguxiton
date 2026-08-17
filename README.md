@@ -1019,3 +1019,23 @@ Only `127.0.0.1` and `::1` are accepted as hosts. This is an operator-facing
 local service boundary, not an authenticated public deployment, database,
 scheduler, trading API, or investment recommendation service. Every response
 keeps `decision_ready=false`.
+
+## Probe the read-only receipt service
+
+Node54 adds a platform-independent deployment/process-manager probe. It makes
+exactly three GET requests to the loopback service, disables proxies, rejects
+redirects and external URLs, and writes one JSON result to standard output:
+
+```bash
+python -m a_share_ai.cli probe-research-receipt-service \
+  --base-url http://127.0.0.1:8765 \
+  --timeout-seconds 3
+```
+
+Exit code `0` means `/healthz`, `/readyz`, and
+`/v1/research/receipt` passed, `/readyz` returned 200,
+`receipt_ready=true`, and `decision_ready=false`. Exit code `1` means the
+service is unavailable, malformed, stale, blocked, or not ready. Exit code `2`
+means the URL or timeout argument is invalid. The probe does not restart,
+retry, write files, or contact external services. It is not a public health
+endpoint and never changes `decision_ready=false`.

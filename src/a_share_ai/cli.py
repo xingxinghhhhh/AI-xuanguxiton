@@ -104,6 +104,12 @@ from .market.coverage import CoverageReport, audit_daily_coverage
 from .market.health import HealthReport, ValidationIssue, build_health_report
 from .market.market_context import INDEX_SYMBOLS, MARKET_CONTEXT_VERSION, MarketContextConfig
 from .market.replay import canonical_jsonl, sha256_bytes, write_atomic
+from .service.read_only_receipt_probe import (
+    DEFAULT_PROBE_TIMEOUT_SECONDS,
+    ReadOnlyReceiptProbeError,
+    probe_exit_code,
+    probe_read_only_receipt_service,
+)
 from .service.read_only_receipt_server import (
     DEFAULT_READ_ONLY_RECEIPT_HOST,
     DEFAULT_READ_ONLY_RECEIPT_PORT,
@@ -763,6 +769,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     receipt_service.add_argument(
         "--port", type=int, default=DEFAULT_READ_ONLY_RECEIPT_PORT
+    )
+
+    receipt_probe = subparsers.add_parser(
+        "probe-research-receipt-service",
+        help="probe a loopback research receipt service",
+    )
+    receipt_probe.add_argument("--base-url", required=True)
+    receipt_probe.add_argument(
+        "--timeout-seconds", type=float, default=DEFAULT_PROBE_TIMEOUT_SECONDS
     )
 
     renderer = subparsers.add_parser(
@@ -1710,6 +1725,31 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_read_only_receipt_probe(args: argparse.Namespace) -> int:
+    try:
+        report = probe_read_only_receipt_service(
+            base_url=args.base_url,
+            timeout_seconds=args.timeout_seconds,
+        )
+        exit_code = probe_exit_code(report)
+    except ReadOnlyReceiptProbeError as exc:
+        report = {
+            "probe_version": "read-only-receipt-service-probe-v1",
+            "base_url": "<redacted>",
+            "status": "invalid",
+            "health_http_status": None,
+            "ready_http_status": None,
+            "receipt_http_status": None,
+            "receipt_ready": None,
+            "decision_ready": None,
+            "checks": [],
+            "issues": [{"code": exc.code, "message": str(exc)}],
+        }
+        exit_code = 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -1911,6 +1951,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_market_aware_session_history_final_receipt(args)
     if args.command == "serve-research-receipt":
         return run_read_only_receipt_server(args)
+    if args.command == "probe-research-receipt-service":
+        return run_read_only_receipt_probe(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":

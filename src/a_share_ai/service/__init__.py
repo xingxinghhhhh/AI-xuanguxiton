@@ -1,5 +1,11 @@
 """Small, read-only service entry points for the A-share system."""
 
+from .read_only_receipt_probe import (
+    READ_ONLY_RECEIPT_SERVICE_PROBE_VERSION,
+    ReadOnlyReceiptProbeError,
+    probe_exit_code,
+    probe_read_only_receipt_service,
+)
 from .read_only_receipt_server import (
     READ_ONLY_RECEIPT_SERVICE_VERSION,
     ReadOnlyReceiptServiceError,
@@ -12,4 +18,8 @@ __all__ = [
     "ReadOnlyReceiptServiceError",
     "create_read_only_receipt_server",
     "serve_read_only_receipt",
+    "READ_ONLY_RECEIPT_SERVICE_PROBE_VERSION",
+    "ReadOnlyReceiptProbeError",
+    "probe_exit_code",
+    "probe_read_only_receipt_service",
 ]
