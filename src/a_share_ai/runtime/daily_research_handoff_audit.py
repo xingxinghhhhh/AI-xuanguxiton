@@ -302,6 +302,10 @@ def _validate_audit(
         )
     if audit.get("stage_count") != 9:
         raise DailyResearchHandoffAuditError("STAGES_INVALID", "audit stage count is invalid")
+    if not isinstance(audit.get("analysis_input_ready"), bool):
+        raise DailyResearchHandoffAuditError(
+            "FIELD_INVALID", "audit analysis readiness is invalid"
+        )
     if audit.get("analysis_input_ready") != run.get("analysis_input_ready"):
         raise DailyResearchHandoffAuditError(
             "CHAIN_MISMATCH", "audit analysis readiness differs"

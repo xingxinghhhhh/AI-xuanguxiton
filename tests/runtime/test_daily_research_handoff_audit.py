@@ -293,6 +293,36 @@ def test_audit_rejects_invalid_admission_and_contradictory_ready_chain(
     assert contradictory["issues"][0]["code"] == "CHAIN_MISMATCH"
 
 
+@pytest.mark.parametrize("invalid_value", [1, 0, None, "true"])
+def test_audit_rejects_non_boolean_audit_readiness(
+    tmp_path: Path, invalid_value: object
+) -> None:
+    root = tmp_path / f"audit-type-{str(invalid_value).lower()}"
+    inputs = _prepare_handoff(root)
+    _build_handoff(inputs, root / "handoff")
+    audit_payload = json.loads(inputs["run_audit_report"].read_text(encoding="utf-8"))
+    audit_payload["analysis_input_ready"] = invalid_value
+    _write_json(inputs["run_audit_report"], _sign(audit_payload))
+    handoff_paths = [
+        root / "handoff/daily_research_handoff.json",
+        root / "handoff/daily_research_handoff_report.json",
+    ]
+    for path in handoff_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["run_audit_report_sha256"] = sha256_bytes(
+            inputs["run_audit_report"].read_bytes()
+        )
+        _write_json(path, _sign(payload))
+    result = audit_daily_research_handoff(
+        handoff_path=handoff_paths[0],
+        handoff_report_path=handoff_paths[1],
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+    assert result["audit_ready"] is False
+    assert result["issues"][0]["code"] == "FIELD_INVALID"
+
+
 def test_audit_rejects_path_escape_and_symlink_escape(tmp_path: Path) -> None:
     root = tmp_path / "paths"
     inputs = _prepare_handoff(root)
