@@ -1214,3 +1214,26 @@ Only a mutually consistent ready chain returns exit `0` and
 `handoff_ready=true`; stale or blocked inputs return `1`, while invalid
 configuration or contracts return `2`. It does not start services, write a
 launch manifest, access external APIs, or authorize trading.
+
+## Independent daily research handoff audit
+
+Node62 independently audits an existing Node61 handoff and all four upstream
+artifact bytes without rebuilding or modifying them:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-handoff \
+  --handoff reports/daily-handoff/daily_research_handoff.json \
+  --handoff-report reports/daily-handoff/daily_research_handoff_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-handoff-audit
+```
+
+The audit writes `daily_research_handoff_audit_report.json` with actual input
+SHA-256 values, independently checked versions, paths, metadata, readiness,
+and sanitized issues. Valid ready, stale, and blocked handoffs return exit `0`
+when the audit itself is complete; only a valid ready chain can keep
+`handoff_ready=true`. Invalid JSON, fields, hashes, timestamps, or path
+boundaries return exit `1` in the report and configuration errors return exit
+`2`. `decision_ready` remains `false`; the command does not rebuild the
+handoff, start a service, access a network/API key, schedule work, or authorize
+trading.

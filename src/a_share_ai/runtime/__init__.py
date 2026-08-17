@@ -5,6 +5,11 @@ from .daily_research_handoff import (
     DailyResearchHandoffError,
     build_daily_research_handoff,
 )
+from .daily_research_handoff_audit import (
+    DAILY_RESEARCH_HANDOFF_AUDIT_VERSION,
+    DailyResearchHandoffAuditError,
+    audit_daily_research_handoff,
+)
 from .daily_research_run import (
     DAILY_RESEARCH_RUN_VERSION,
     DailyResearchRunError,
@@ -17,6 +22,9 @@ __all__ = [
     "DAILY_RESEARCH_HANDOFF_VERSION",
     "DailyResearchHandoffError",
     "build_daily_research_handoff",
+    "DAILY_RESEARCH_HANDOFF_AUDIT_VERSION",
+    "DailyResearchHandoffAuditError",
+    "audit_daily_research_handoff",
     "DAILY_RESEARCH_RUN_VERSION",
     "DailyResearchRunError",
     "DailyResearchSpec",
