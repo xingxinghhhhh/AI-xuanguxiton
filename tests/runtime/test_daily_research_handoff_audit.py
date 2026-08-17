@@ -208,6 +208,91 @@ def test_ready_admission_must_have_all_internal_references(tmp_path: Path) -> No
     assert result["issues"][0]["code"] == "ADMISSION_REFERENCES_MISSING"
 
 
+def test_audit_rejects_invalid_admission_and_contradictory_ready_chain(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "invalid-admission"
+    inputs = _prepare_handoff(root)
+    _build_handoff(inputs, root / "handoff")
+    for path in (inputs["admission"], inputs["admission_report"]):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["status"] = "invalid"
+        payload["freshness_status"] = "invalid"
+        payload["audit_ready"] = False
+        payload["admission_ready"] = False
+        _write_json(path, _sign(payload))
+    handoff_paths = [
+        root / "handoff/daily_research_handoff.json",
+        root / "handoff/daily_research_handoff_report.json",
+    ]
+    for path in handoff_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["admission_status"] = "invalid"
+        payload["admission_ready"] = False
+        payload["admission_sha256"] = sha256_bytes(inputs["admission"].read_bytes())
+        payload["admission_report_sha256"] = sha256_bytes(
+            inputs["admission_report"].read_bytes()
+        )
+        _write_json(path, _sign(payload))
+    invalid_admission = audit_daily_research_handoff(
+        handoff_path=handoff_paths[0],
+        handoff_report_path=handoff_paths[1],
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+    assert invalid_admission["audit_ready"] is False
+    assert invalid_admission["issues"][0]["code"] == "UPSTREAM_INVALID"
+
+    root = tmp_path / "contradictory"
+    inputs = _prepare_handoff(root, blocked=True)
+    _build_handoff(inputs, root / "handoff")
+    for path in (inputs["admission"], inputs["admission_report"]):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["status"] = "ready"
+        payload["freshness_status"] = "fresh"
+        payload["audit_ready"] = True
+        payload["analysis_input_ready"] = True
+        payload["admission_ready"] = True
+        payload["run_report_path"] = inputs["run_report"].relative_to(root).as_posix()
+        payload["run_audit_report_path"] = inputs["run_audit_report"].relative_to(
+            root
+        ).as_posix()
+        payload["calendar_path"] = inputs["calendar"].relative_to(root).as_posix()
+        payload["calendar_report_path"] = inputs["calendar_report"].relative_to(
+            root
+        ).as_posix()
+        payload["run_report_sha256"] = sha256_bytes(inputs["run_report"].read_bytes())
+        payload["run_audit_report_sha256"] = sha256_bytes(
+            inputs["run_audit_report"].read_bytes()
+        )
+        payload["calendar_sha256"] = sha256_bytes(inputs["calendar"].read_bytes())
+        payload["calendar_report_sha256"] = sha256_bytes(
+            inputs["calendar_report"].read_bytes()
+        )
+        _write_json(path, _sign(payload))
+    handoff_paths = [
+        root / "handoff/daily_research_handoff.json",
+        root / "handoff/daily_research_handoff_report.json",
+    ]
+    for path in handoff_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["admission_status"] = "ready"
+        payload["admission_ready"] = True
+        payload["admission_sha256"] = sha256_bytes(inputs["admission"].read_bytes())
+        payload["admission_report_sha256"] = sha256_bytes(
+            inputs["admission_report"].read_bytes()
+        )
+        _write_json(path, _sign(payload))
+    contradictory = audit_daily_research_handoff(
+        handoff_path=handoff_paths[0],
+        handoff_report_path=handoff_paths[1],
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+    assert contradictory["audit_ready"] is False
+    assert contradictory["issues"][0]["code"] == "CHAIN_MISMATCH"
+
+
 def test_audit_rejects_path_escape_and_symlink_escape(tmp_path: Path) -> None:
     root = tmp_path / "paths"
     inputs = _prepare_handoff(root)

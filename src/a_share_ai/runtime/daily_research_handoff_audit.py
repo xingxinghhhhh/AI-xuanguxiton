@@ -310,6 +310,8 @@ def _validate_audit(
         raise DailyResearchHandoffAuditError("CHAIN_MISMATCH", "audit run path differs")
     if audit.get("run_report_sha256") != run_file["sha256"]:
         raise DailyResearchHandoffAuditError("HASH_MISMATCH", "audit run hash differs")
+    if audit.get("run_status") != run.get("status"):
+        raise DailyResearchHandoffAuditError("CHAIN_MISMATCH", "audit run status differs")
     if audit.get("symbol") != run.get("symbol") or audit.get("as_of") != run.get("as_of"):
         raise DailyResearchHandoffAuditError("CHAIN_MISMATCH", "run audit metadata differs")
     if audit.get("received_at") != run.get("received_at"):
@@ -518,6 +520,23 @@ def audit_daily_research_handoff(
             admission_report_file["path"], label="daily admission report"
         )
         admission_issues = _validate_admission(admission, admission_report, root=root)
+        if admission["status"] == "invalid":
+            raise DailyResearchHandoffAuditError(
+                "UPSTREAM_INVALID", "invalid daily admission cannot be audited"
+            )
+        if admission["status"] == "ready" and (
+            run["status"] != "ready"
+            or not audit["audit_ready"]
+            or not run["analysis_input_ready"]
+            or not admission["analysis_input_ready"]
+        ):
+            raise DailyResearchHandoffAuditError(
+                "CHAIN_MISMATCH", "ready admission has non-ready upstream state"
+            )
+        if admission["analysis_input_ready"] != run["analysis_input_ready"]:
+            raise DailyResearchHandoffAuditError(
+                "CHAIN_MISMATCH", "admission analysis readiness differs"
+            )
         if admission.get("run_report_path") not in {None, run_file["relative_path"]}:
             raise DailyResearchHandoffAuditError("CHAIN_MISMATCH", "admission run path differs")
         if admission.get("run_audit_report_path") not in {None, audit_file["relative_path"]}:
