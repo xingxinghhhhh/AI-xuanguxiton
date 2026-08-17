@@ -372,8 +372,6 @@ class _ReceiptRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         health_summary = dict(self.server.summary)
-        if self.server.daily_admission_summary is not None:
-            health_summary["daily_admission"] = self.server.daily_admission_summary
         if self.path == "/healthz":
             self._send_json(HTTPStatus.OK, health_summary)
             return

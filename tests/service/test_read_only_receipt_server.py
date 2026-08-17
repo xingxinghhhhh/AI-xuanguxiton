@@ -14,6 +14,10 @@ from a_share_ai.analysis.market_aware_session_history_final_receipt import (
     MARKET_AWARE_SESSION_HISTORY_FINAL_RECEIPT_VERSION,
 )
 from a_share_ai.market.replay import sha256_bytes
+from a_share_ai.service.read_only_receipt_probe import (
+    probe_exit_code,
+    probe_read_only_receipt_service,
+)
 from a_share_ai.service.read_only_receipt_server import (
     READ_ONLY_RECEIPT_SERVICE_VERSION,
     ReadOnlyReceiptServiceError,
@@ -242,9 +246,10 @@ def test_daily_admission_routes_and_ready_gate(
     try:
         status, health = _request(base_url, "/healthz")
         assert status == 200
-        assert health["daily_admission"]["admission_ready"] is expected_ready
+        assert "daily_admission" not in health
         status, ready = _request(base_url, "/readyz")
         assert status == (200 if expected_ready else 503)
+        assert health == ready
         status, daily = _request(base_url, "/v1/research/daily-admission")
         assert status == 200
         assert set(daily) == {
@@ -264,6 +269,32 @@ def test_daily_admission_routes_and_ready_gate(
         status, receipt = _request(base_url, "/v1/research/receipt")
         assert status == 200
         assert "daily_admission" not in receipt
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_daily_admission_service_remains_compatible_with_node54_probe(tmp_path: Path) -> None:
+    receipt_path, report_path = _write_input_pair(tmp_path)
+    daily_path, daily_report_path, daily_root = _write_daily_admission_pair(tmp_path)
+    server = create_read_only_receipt_server(
+        receipt_path=receipt_path,
+        receipt_report_path=report_path,
+        artifact_root=tmp_path / "artifacts",
+        daily_admission_path=daily_path,
+        daily_admission_report_path=daily_report_path,
+        daily_admission_root=daily_root,
+        port=_free_port(),
+    )
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        probe = probe_read_only_receipt_service(base_url=base_url)
+        assert probe_exit_code(probe) == 0
+        assert probe["status"] == "ready"
+        assert probe["ready_http_status"] == 200
     finally:
         server.shutdown()
         thread.join(timeout=3)
