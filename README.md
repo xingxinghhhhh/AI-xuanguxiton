@@ -1125,5 +1125,7 @@ python -m a_share_ai.cli audit-daily-research-run \
 The audit writes `daily_research_run_audit_report.json` with versioned run
 metadata, the failed stage when blocked, issues, and a deterministic
 `output_sha256` self-hash. The command exits `0` only when `audit_ready=true`;
+an auditable but blocked upstream run exits `1`, and invalid CLI parameters
+exit `2`;
 any missing, changed, out-of-root, incomplete, misordered, or decision-enabled
 input fails closed.

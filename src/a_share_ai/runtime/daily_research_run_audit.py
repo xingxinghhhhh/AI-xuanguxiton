@@ -503,8 +503,11 @@ def audit_daily_research_run(
                 raise DailyResearchRunAuditError(
                     "FIELD_INVALID", "blocked run has analysis summary versions"
                 )
-        result["status"] = "ready"
-        result["audit_ready"] = True
+            result["status"] = "blocked"
+            result["issues"] = [{"code": "UPSTREAM_NOT_READY", "message": "run status is blocked"}]
+        if report["status"] == "ready":
+            result["status"] = "ready"
+            result["audit_ready"] = True
     except DailyResearchRunAuditError as exc:
         result["issues"] = [{"code": exc.code, "message": str(exc)}]
     return _finalize(result, output_dir=output_dir)

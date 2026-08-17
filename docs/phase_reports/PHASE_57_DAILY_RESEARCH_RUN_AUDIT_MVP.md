@@ -22,6 +22,10 @@ version summaries, issues, and `decision_ready=false`. Its
 `output_sha256` is a deterministic self-hash over the canonical report with
 that field set to `null`.
 
+The CLI returns `0` only for a ready run with `audit_ready=true`; a structurally
+audited but blocked upstream run returns `1`, and argparse parameter errors
+return `2`.
+
 ## Checks
 
 The audit fail-closes on malformed or unknown run fields, version mismatch,

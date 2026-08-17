@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+import pytest
+
+from a_share_ai.cli import main
 from a_share_ai.evidence.contracts import (
     BUNDLE_VERSION_V2,
     MARKET_CONTEXT_SUMMARY_VERSION,
@@ -212,10 +215,63 @@ def test_blocked_run_requires_one_failure_then_skipped(tmp_path: Path) -> None:
         output_dir=root / "audit",
     )
 
-    assert report["audit_ready"] is True
-    assert report["status"] == "ready"
+    assert report["audit_ready"] is False
+    assert report["status"] == "blocked"
     assert report["run_status"] == "blocked"
     assert report["failed_stage"] == "profitability"
+    assert report["issues"][0]["code"] == "UPSTREAM_NOT_READY"
+
+
+def test_cli_ready_returns_zero_and_matches_output_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "run"
+    report_path = _write_chain(root)
+
+    code = main(
+        [
+            "audit-daily-research-run",
+            "--run-report",
+            str(report_path),
+            "--artifact-root",
+            str(root),
+            "--output-dir",
+            str(root / "audit"),
+        ]
+    )
+
+    assert code == 0
+    stdout_report = json.loads(capsys.readouterr().out)
+    saved_report = json.loads(
+        (root / "audit/daily_research_run_audit_report.json").read_text(encoding="utf-8")
+    )
+    assert stdout_report == saved_report
+
+
+def test_cli_blocked_returns_one(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "run"
+    report_path = _write_chain(root, status="blocked", failed_index=5)
+
+    code = main(
+        [
+            "audit-daily-research-run",
+            "--run-report",
+            str(report_path),
+            "--artifact-root",
+            str(root),
+            "--output-dir",
+            str(root / "audit"),
+        ]
+    )
+
+    assert code == 1
+    assert json.loads(capsys.readouterr().out)["audit_ready"] is False
+
+
+def test_cli_parameter_error_returns_two(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["audit-daily-research-run", "--run-report", str(tmp_path / "missing.json")])
+    assert exc_info.value.code == 2
 
 
 def test_audit_accepts_node56_input_root_prefixed_paths(tmp_path: Path) -> None:
@@ -250,6 +306,59 @@ def test_audit_rejects_tampered_artifact_hash(tmp_path: Path) -> None:
 
     assert report["audit_ready"] is False
     assert report["issues"][0]["code"] == "HASH_MISMATCH"
+
+
+def test_audit_rejects_missing_artifact(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    report_path = _write_chain(root)
+    (root / "market/raw_response.json").unlink()
+
+    report = audit_daily_research_run(
+        run_report_path=report_path,
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+
+    assert report["audit_ready"] is False
+    assert report["issues"][0]["code"] == "INPUT_UNAVAILABLE"
+
+
+def test_audit_rejects_invalid_json_and_utf8(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    report_path = _write_chain(root)
+    invalid_path = root / "market-context/market_context_report.json"
+    invalid_path.write_bytes(b"not-json\xff")
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    for artifact in payload["stages"][1]["artifacts"]:
+        if artifact["path"] == "market-context/market_context_report.json":
+            artifact["sha256"] = sha256_bytes(invalid_path.read_bytes())
+    _write_json(report_path, payload)
+
+    report = audit_daily_research_run(
+        run_report_path=report_path,
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+
+    assert report["audit_ready"] is False
+    assert report["issues"][0]["code"] == "INPUT_JSON_INVALID"
+
+
+def test_audit_rejects_run_version_mismatch(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    report_path = _write_chain(root)
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    payload["run_version"] = "wrong-version"
+    _write_json(report_path, payload)
+
+    report = audit_daily_research_run(
+        run_report_path=report_path,
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+
+    assert report["audit_ready"] is False
+    assert report["issues"][0]["code"] == "VERSION_MISMATCH"
 
 
 def test_audit_rejects_decision_ready_true(tmp_path: Path) -> None:
