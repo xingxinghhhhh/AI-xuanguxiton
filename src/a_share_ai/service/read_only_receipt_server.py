@@ -7,15 +7,17 @@ import re
 import socket
 import sys
 from collections.abc import Mapping
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from ..analysis.market_aware_session_history_final_receipt import (
     MARKET_AWARE_SESSION_HISTORY_FINAL_RECEIPT_VERSION,
 )
 from ..market.replay import sha256_bytes
+from ..runtime.daily_research_admission import DAILY_RESEARCH_ADMISSION_VERSION
 
 READ_ONLY_RECEIPT_SERVICE_VERSION = "read-only-receipt-service-v1"
 DEFAULT_READ_ONLY_RECEIPT_HOST = "127.0.0.1"
@@ -33,6 +35,30 @@ _SUMMARY_FIELDS = (
     "decision_ready",
     "issues",
 )
+_DAILY_ADMISSION_FIELDS = {
+    "admission_version",
+    "run_report_path",
+    "run_audit_report_path",
+    "calendar_path",
+    "calendar_report_path",
+    "run_report_sha256",
+    "run_audit_report_sha256",
+    "calendar_sha256",
+    "calendar_report_sha256",
+    "symbol",
+    "as_of",
+    "evaluation_at",
+    "expected_latest_trading_date",
+    "status",
+    "freshness_status",
+    "audit_ready",
+    "analysis_input_ready",
+    "admission_ready",
+    "issues",
+    "decision_ready",
+    "output_sha256",
+}
+_DAILY_ADMISSION_STATUSES = {"ready", "stale", "calendar_unknown", "blocked", "invalid"}
 
 
 class ReadOnlyReceiptServiceError(ValueError):
@@ -44,9 +70,7 @@ class ReadOnlyReceiptServiceError(ValueError):
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:
-    return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(
-        "utf-8"
-    )
+    return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
 
 def _read_json(path: Path, *, label: str) -> dict[str, Any]:
@@ -70,6 +94,22 @@ def _safe_input(path: Path, *, root: Path, label: str) -> Path:
     if not candidate.is_file():
         raise ReadOnlyReceiptServiceError("INPUT_UNAVAILABLE", f"{label} is not a file")
     return candidate
+
+
+def _safe_relative_input(value: Any, *, root: Path, label: str) -> tuple[Path, str]:
+    if not isinstance(value, str) or not value.strip():
+        raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} path is invalid")
+    windows_path = PureWindowsPath(value)
+    if (
+        Path(value).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or any(part in {"", ".", ".."} for part in windows_path.parts)
+        or value.replace("\\", "/") != "/".join(windows_path.parts)
+    ):
+        raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} path is invalid")
+    candidate = _safe_input(root / Path(value), root=root, label=label)
+    return candidate, candidate.relative_to(root.resolve()).as_posix()
 
 
 def _validate_self_hash(payload: Mapping[str, Any], *, label: str) -> None:
@@ -205,8 +245,112 @@ def load_read_only_receipt_summary(
     }
 
 
+def _parse_daily_datetime(value: Any, *, label: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} is invalid")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} must include timezone")
+    return parsed
+
+
+def load_daily_research_admission_summary(
+    *, admission_path: Path, admission_report_path: Path, artifact_root: Path
+) -> dict[str, Any]:
+    """Load and validate the Node58 admission pair for service exposure."""
+
+    root = artifact_root.resolve()
+    if not root.is_dir():
+        raise ReadOnlyReceiptServiceError(
+            "ARTIFACT_ROOT_INVALID", "daily admission root is invalid"
+        )
+    admission_file = _safe_input(admission_path, root=root, label="daily admission")
+    report_file = _safe_input(admission_report_path, root=root, label="daily admission report")
+    if admission_file == report_file:
+        raise ReadOnlyReceiptServiceError(
+            "PATH_INVALID", "daily admission inputs must be distinct files"
+        )
+    admission = _read_json(admission_file, label="daily admission")
+    report = _read_json(report_file, label="daily admission report")
+    for label, payload in (("daily admission", admission), ("daily admission report", report)):
+        if set(payload) != _DAILY_ADMISSION_FIELDS:
+            raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} fields are invalid")
+        _validate_self_hash(payload, label=label)
+        if payload.get("admission_version") != DAILY_RESEARCH_ADMISSION_VERSION:
+            raise ReadOnlyReceiptServiceError("VERSION_MISMATCH", f"{label} version is invalid")
+        if payload.get("decision_ready") is not False:
+            raise ReadOnlyReceiptServiceError(
+                "DECISION_GATE_INVALID", f"{label} decision_ready must be false"
+            )
+        if payload.get("status") not in _DAILY_ADMISSION_STATUSES:
+            raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} status is invalid")
+        if payload.get("freshness_status") != payload.get("status"):
+            raise ReadOnlyReceiptServiceError("FIELD_MISMATCH", f"{label} freshness status differs")
+        for field in ("audit_ready", "analysis_input_ready", "admission_ready"):
+            if not isinstance(payload.get(field), bool):
+                raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} {field} is invalid")
+        if payload["admission_ready"] is not (payload["status"] == "ready"):
+            raise ReadOnlyReceiptServiceError(
+                "FIELD_MISMATCH", f"{label} admission gate is invalid"
+            )
+        if payload["status"] == "ready" and (
+            payload["audit_ready"] is not True or payload["analysis_input_ready"] is not True
+        ):
+            raise ReadOnlyReceiptServiceError("FIELD_MISMATCH", f"{label} ready gates are invalid")
+        if not isinstance(payload.get("symbol"), str) or not payload["symbol"].strip():
+            raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} symbol is invalid")
+        _parse_daily_datetime(payload.get("as_of"), label=f"{label}.as_of")
+        _parse_daily_datetime(payload.get("evaluation_at"), label=f"{label}.evaluation_at")
+        if not isinstance(payload.get("issues"), list):
+            raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} issues are invalid")
+
+    for field in _DAILY_ADMISSION_FIELDS:
+        if admission.get(field) != report.get(field):
+            raise ReadOnlyReceiptServiceError("FIELD_MISMATCH", f"daily admission {field} differs")
+    admission_root = root
+    for path_field, sha_field in (
+        ("run_report_path", "run_report_sha256"),
+        ("run_audit_report_path", "run_audit_report_sha256"),
+        ("calendar_path", "calendar_sha256"),
+        ("calendar_report_path", "calendar_report_sha256"),
+    ):
+        file_path, relative = _safe_relative_input(
+            admission[path_field], root=admission_root, label=f"daily admission {path_field}"
+        )
+        if relative != admission[path_field]:
+            raise ReadOnlyReceiptServiceError(
+                "REPORT_INVALID", f"daily admission {path_field} is not normalized"
+            )
+        expected_sha = admission[sha_field]
+        if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+            raise ReadOnlyReceiptServiceError(
+                "REPORT_INVALID", f"daily admission {sha_field} is invalid"
+            )
+        if sha256_bytes(file_path.read_bytes()) != expected_sha:
+            raise ReadOnlyReceiptServiceError(
+                "HASH_MISMATCH", f"daily admission {path_field} hash differs"
+            )
+    issues = _safe_issues(admission["issues"])
+    return {
+        "service_version": READ_ONLY_RECEIPT_SERVICE_VERSION,
+        "admission_version": admission["admission_version"],
+        "symbol": admission["symbol"],
+        "as_of": admission["as_of"],
+        "evaluation_at": admission["evaluation_at"],
+        "status": admission["status"],
+        "freshness_status": admission["freshness_status"],
+        "admission_ready": admission["admission_ready"],
+        "issues": issues,
+        "decision_ready": False,
+    }
+
+
 class _ReceiptHTTPServer(HTTPServer):
     summary: dict[str, Any]
+    daily_admission_summary: dict[str, Any] | None
 
 
 class _ReceiptHTTPServerV6(_ReceiptHTTPServer):
@@ -227,19 +371,32 @@ class _ReceiptRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
+        health_summary = dict(self.server.summary)
+        if self.server.daily_admission_summary is not None:
+            health_summary["daily_admission"] = self.server.daily_admission_summary
         if self.path == "/healthz":
-            self._send_json(HTTPStatus.OK, self.server.summary)
+            self._send_json(HTTPStatus.OK, health_summary)
             return
         if self.path == "/readyz":
             status = (
                 HTTPStatus.OK
                 if self.server.summary["receipt_ready"]
+                and (
+                    self.server.daily_admission_summary is None
+                    or self.server.daily_admission_summary["admission_ready"]
+                )
                 else HTTPStatus.SERVICE_UNAVAILABLE
             )
-            self._send_json(status, self.server.summary)
+            self._send_json(status, health_summary)
             return
         if self.path == "/v1/research/receipt":
             self._send_json(HTTPStatus.OK, self.server.summary)
+            return
+        if self.path == "/v1/research/daily-admission":
+            if self.server.daily_admission_summary is None:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            else:
+                self._send_json(HTTPStatus.OK, self.server.daily_admission_summary)
             return
         self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
@@ -267,6 +424,9 @@ def create_read_only_receipt_server(
     artifact_root: Path,
     host: str = DEFAULT_READ_ONLY_RECEIPT_HOST,
     port: int = DEFAULT_READ_ONLY_RECEIPT_PORT,
+    daily_admission_path: Path | None = None,
+    daily_admission_report_path: Path | None = None,
+    daily_admission_root: Path | None = None,
 ) -> _ReceiptHTTPServer:
     """Create a validated loopback-only HTTP server without starting it."""
 
@@ -279,6 +439,20 @@ def create_read_only_receipt_server(
         receipt_report_path=receipt_report_path,
         artifact_root=artifact_root,
     )
+    daily_values = (daily_admission_path, daily_admission_report_path, daily_admission_root)
+    if any(value is not None for value in daily_values) and not all(
+        value is not None for value in daily_values
+    ):
+        raise ReadOnlyReceiptServiceError(
+            "CONFIG_INVALID", "daily admission options must be provided as a complete set"
+        )
+    daily_summary = None
+    if all(value is not None for value in daily_values):
+        daily_summary = load_daily_research_admission_summary(
+            admission_path=daily_admission_path,
+            admission_report_path=daily_admission_report_path,
+            artifact_root=daily_admission_root,
+        )
     try:
         server_class = _ReceiptHTTPServerV6 if host == "::1" else _ReceiptHTTPServer
         server = server_class((host, port), _ReceiptRequestHandler)
@@ -287,6 +461,7 @@ def create_read_only_receipt_server(
             "BIND_FAILED", "could not bind service host and port"
         ) from exc
     server.summary = summary
+    server.daily_admission_summary = daily_summary
     return server
 
 
@@ -297,6 +472,9 @@ def serve_read_only_receipt(
     artifact_root: Path,
     host: str = DEFAULT_READ_ONLY_RECEIPT_HOST,
     port: int = DEFAULT_READ_ONLY_RECEIPT_PORT,
+    daily_admission_path: Path | None = None,
+    daily_admission_report_path: Path | None = None,
+    daily_admission_root: Path | None = None,
 ) -> None:
     """Validate the receipt and serve it until interrupted."""
 
@@ -306,6 +484,9 @@ def serve_read_only_receipt(
         artifact_root=artifact_root,
         host=host,
         port=port,
+        daily_admission_path=daily_admission_path,
+        daily_admission_report_path=daily_admission_report_path,
+        daily_admission_root=daily_admission_root,
     )
     try:
         print(

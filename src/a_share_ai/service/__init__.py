@@ -19,6 +19,7 @@ from .read_only_receipt_server import (
     READ_ONLY_RECEIPT_SERVICE_VERSION,
     ReadOnlyReceiptServiceError,
     create_read_only_receipt_server,
+    load_daily_research_admission_summary,
     serve_read_only_receipt,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     "READ_ONLY_RECEIPT_SERVICE_VERSION",
     "ReadOnlyReceiptServiceError",
     "create_read_only_receipt_server",
+    "load_daily_research_admission_summary",
     "serve_read_only_receipt",
     "READ_ONLY_RECEIPT_SERVICE_PROBE_VERSION",
     "ReadOnlyReceiptProbeError",

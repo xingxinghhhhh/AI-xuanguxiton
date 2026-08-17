@@ -123,6 +123,7 @@ from .service.read_only_receipt_server import (
     DEFAULT_READ_ONLY_RECEIPT_HOST,
     DEFAULT_READ_ONLY_RECEIPT_PORT,
     ReadOnlyReceiptServiceError,
+    load_daily_research_admission_summary,
     serve_read_only_receipt,
 )
 
@@ -367,9 +368,7 @@ def _build_parser() -> argparse.ArgumentParser:
     market_aware_session_package.add_argument("--session-report", type=Path, required=True)
     market_aware_session_package.add_argument("--freshness-report", type=Path, required=True)
     market_aware_session_package.add_argument("--session-markdown", type=Path, required=True)
-    market_aware_session_package.add_argument(
-        "--session-render-report", type=Path, required=True
-    )
+    market_aware_session_package.add_argument("--session-render-report", type=Path, required=True)
     market_aware_session_package.add_argument("--artifact-root", type=Path, required=True)
     market_aware_session_package.add_argument("--output-dir", type=Path, required=True)
 
@@ -378,9 +377,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="independently audit a market-aware session package",
     )
     market_aware_session_package_audit.add_argument("--package", type=Path, required=True)
-    market_aware_session_package_audit.add_argument(
-        "--package-report", type=Path, required=True
-    )
+    market_aware_session_package_audit.add_argument("--package-report", type=Path, required=True)
     market_aware_session_package_audit.add_argument("--artifact-root", type=Path, required=True)
     market_aware_session_package_audit.add_argument("--output-dir", type=Path, required=True)
 
@@ -388,9 +385,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "compare-market-aware-session-packages",
         help="compare two independently audited market-aware session packages",
     )
-    market_aware_session_package_diff.add_argument(
-        "--previous-package", type=Path, required=True
-    )
+    market_aware_session_package_diff.add_argument("--previous-package", type=Path, required=True)
     market_aware_session_package_diff.add_argument(
         "--previous-package-report", type=Path, required=True
     )
@@ -425,9 +420,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "audit-market-aware-session-package-diff-render",
         help="audit market-aware session package diff render artifacts",
     )
-    market_aware_session_package_diff_render_audit.add_argument(
-        "--diff", type=Path, required=True
-    )
+    market_aware_session_package_diff_render_audit.add_argument("--diff", type=Path, required=True)
     market_aware_session_package_diff_render_audit.add_argument(
         "--diff-report", type=Path, required=True
     )
@@ -457,12 +450,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="audit a market-aware session history manifest",
     )
     market_aware_session_history_audit.add_argument("--history", type=Path, required=True)
-    market_aware_session_history_audit.add_argument(
-        "--history-report", type=Path, required=True
-    )
-    market_aware_session_history_audit.add_argument(
-        "--history-root", type=Path, required=True
-    )
+    market_aware_session_history_audit.add_argument("--history-report", type=Path, required=True)
+    market_aware_session_history_audit.add_argument("--history-root", type=Path, required=True)
     market_aware_session_history_audit.add_argument("--output-dir", type=Path, required=True)
 
     market_aware_session_history_renderer = subparsers.add_parser(
@@ -470,81 +459,55 @@ def _build_parser() -> argparse.ArgumentParser:
         help="render a market-aware session history as Markdown",
     )
     market_aware_session_history_renderer.add_argument("--history", type=Path, required=True)
-    market_aware_session_history_renderer.add_argument(
-        "--history-report", type=Path, required=True
-    )
+    market_aware_session_history_renderer.add_argument("--history-report", type=Path, required=True)
     market_aware_session_history_renderer.add_argument(
         "--history-audit-report", type=Path, required=True
     )
-    market_aware_session_history_renderer.add_argument(
-        "--history-root", type=Path, required=True
-    )
-    market_aware_session_history_renderer.add_argument(
-        "--output-dir", type=Path, required=True
-    )
+    market_aware_session_history_renderer.add_argument("--history-root", type=Path, required=True)
+    market_aware_session_history_renderer.add_argument("--output-dir", type=Path, required=True)
 
     market_aware_session_history_render_audit = subparsers.add_parser(
         "audit-market-aware-session-history-render",
         help="audit a rendered market-aware session history",
     )
-    market_aware_session_history_render_audit.add_argument(
-        "--history", type=Path, required=True
-    )
+    market_aware_session_history_render_audit.add_argument("--history", type=Path, required=True)
     market_aware_session_history_render_audit.add_argument(
         "--history-report", type=Path, required=True
     )
     market_aware_session_history_render_audit.add_argument(
         "--history-audit-report", type=Path, required=True
     )
-    market_aware_session_history_render_audit.add_argument(
-        "--markdown", type=Path, required=True
-    )
+    market_aware_session_history_render_audit.add_argument("--markdown", type=Path, required=True)
     market_aware_session_history_render_audit.add_argument(
         "--render-report", type=Path, required=True
     )
     market_aware_session_history_render_audit.add_argument(
         "--artifact-root", type=Path, required=True
     )
-    market_aware_session_history_render_audit.add_argument(
-        "--output-dir", type=Path, required=True
-    )
+    market_aware_session_history_render_audit.add_argument("--output-dir", type=Path, required=True)
 
     market_aware_session_history_manifest = subparsers.add_parser(
         "build-market-aware-session-history-manifest",
         help="build an immutable market-aware session history manifest",
     )
-    market_aware_session_history_manifest.add_argument(
-        "--history", type=Path, required=True
-    )
-    market_aware_session_history_manifest.add_argument(
-        "--history-report", type=Path, required=True
-    )
+    market_aware_session_history_manifest.add_argument("--history", type=Path, required=True)
+    market_aware_session_history_manifest.add_argument("--history-report", type=Path, required=True)
     market_aware_session_history_manifest.add_argument(
         "--history-audit-report", type=Path, required=True
     )
-    market_aware_session_history_manifest.add_argument(
-        "--markdown", type=Path, required=True
-    )
-    market_aware_session_history_manifest.add_argument(
-        "--render-report", type=Path, required=True
-    )
+    market_aware_session_history_manifest.add_argument("--markdown", type=Path, required=True)
+    market_aware_session_history_manifest.add_argument("--render-report", type=Path, required=True)
     market_aware_session_history_manifest.add_argument(
         "--render-audit-report", type=Path, required=True
     )
-    market_aware_session_history_manifest.add_argument(
-        "--artifact-root", type=Path, required=True
-    )
-    market_aware_session_history_manifest.add_argument(
-        "--output-dir", type=Path, required=True
-    )
+    market_aware_session_history_manifest.add_argument("--artifact-root", type=Path, required=True)
+    market_aware_session_history_manifest.add_argument("--output-dir", type=Path, required=True)
 
     market_aware_session_history_manifest_audit = subparsers.add_parser(
         "audit-market-aware-session-history-manifest",
         help="audit a market-aware session history manifest",
     )
-    market_aware_session_history_manifest_audit.add_argument(
-        "--manifest", type=Path, required=True
-    )
+    market_aware_session_history_manifest_audit.add_argument("--manifest", type=Path, required=True)
     market_aware_session_history_manifest_audit.add_argument(
         "--manifest-report", type=Path, required=True
     )
@@ -605,27 +568,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "build-market-aware-session-history-closure",
         help="build a market-aware session history closure report",
     )
-    market_aware_session_history_closure.add_argument(
-        "--manifest", type=Path, required=True
-    )
-    market_aware_session_history_closure.add_argument(
-        "--manifest-report", type=Path, required=True
-    )
+    market_aware_session_history_closure.add_argument("--manifest", type=Path, required=True)
+    market_aware_session_history_closure.add_argument("--manifest-report", type=Path, required=True)
     market_aware_session_history_closure.add_argument(
         "--manifest-audit-report", type=Path, required=True
     )
-    market_aware_session_history_closure.add_argument(
-        "--render-report", type=Path, required=True
-    )
+    market_aware_session_history_closure.add_argument("--render-report", type=Path, required=True)
     market_aware_session_history_closure.add_argument(
         "--render-audit-report", type=Path, required=True
     )
-    market_aware_session_history_closure.add_argument(
-        "--artifact-root", type=Path, required=True
-    )
-    market_aware_session_history_closure.add_argument(
-        "--output-dir", type=Path, required=True
-    )
+    market_aware_session_history_closure.add_argument("--artifact-root", type=Path, required=True)
+    market_aware_session_history_closure.add_argument("--output-dir", type=Path, required=True)
 
     market_aware_session_history_closure_renderer = subparsers.add_parser(
         "render-market-aware-session-history-closure",
@@ -775,9 +728,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "build-market-aware-session-history-final-receipt",
         help="build the final market-aware session history receipt",
     )
-    market_aware_session_history_final_receipt.add_argument(
-        "--admission", type=Path, required=True
-    )
+    market_aware_session_history_final_receipt.add_argument("--admission", type=Path, required=True)
     market_aware_session_history_final_receipt.add_argument(
         "--admission-report", type=Path, required=True
     )
@@ -802,6 +753,9 @@ def _build_parser() -> argparse.ArgumentParser:
     receipt_service.add_argument("--receipt", type=Path)
     receipt_service.add_argument("--receipt-report", type=Path)
     receipt_service.add_argument("--artifact-root", type=Path, required=True)
+    receipt_service.add_argument("--daily-admission", type=Path)
+    receipt_service.add_argument("--daily-admission-report", type=Path)
+    receipt_service.add_argument("--daily-admission-root", type=Path)
     receipt_service.add_argument(
         "--host",
         choices=("127.0.0.1", "::1"),
@@ -1786,10 +1740,22 @@ def run_market_aware_session_history_final_receipt(
 
 
 def run_read_only_receipt_server(args: argparse.Namespace) -> int:
+    daily_values = (
+        args.daily_admission,
+        args.daily_admission_report,
+        args.daily_admission_root,
+    )
+    if any(value is not None for value in daily_values) and not all(
+        value is not None for value in daily_values
+    ):
+        print(
+            "CONFIG_INVALID: daily admission options must be provided as a complete set",
+            file=sys.stderr,
+        )
+        return 2
     if args.launch_manifest is not None:
         if any(
-            value is not None
-            for value in (args.receipt, args.receipt_report, args.host, args.port)
+            value is not None for value in (args.receipt, args.receipt_report, args.host, args.port)
         ):
             print(
                 "CONFIG_INVALID: launch manifest cannot be combined with direct launch options",
@@ -1802,9 +1768,35 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
                 artifact_root=args.artifact_root,
             )
             if args.check_only:
-                print(json.dumps(launch_check_report(config), ensure_ascii=False, sort_keys=True))
+                check_report = launch_check_report(config)
+                if all(value is not None for value in daily_values):
+                    check_report["daily_admission"] = load_daily_research_admission_summary(
+                        admission_path=args.daily_admission,
+                        admission_report_path=args.daily_admission_report,
+                        artifact_root=args.daily_admission_root,
+                    )
+                print(json.dumps(check_report, ensure_ascii=False, sort_keys=True))
                 return 0
-            serve_read_only_receipt_launch(config)
+            if any(
+                value is not None
+                for value in (
+                    args.daily_admission,
+                    args.daily_admission_report,
+                    args.daily_admission_root,
+                )
+            ):
+                serve_read_only_receipt(
+                    receipt_path=config.receipt_path,
+                    receipt_report_path=config.receipt_report_path,
+                    artifact_root=config.artifact_root,
+                    host=config.host,
+                    port=config.port,
+                    daily_admission_path=args.daily_admission,
+                    daily_admission_report_path=args.daily_admission_report,
+                    daily_admission_root=args.daily_admission_root,
+                )
+            else:
+                serve_read_only_receipt_launch(config)
         except ReadOnlyReceiptLaunchError as exc:
             print(f"{exc.code}: {exc}", file=sys.stderr)
             return 2
@@ -1831,6 +1823,9 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
             artifact_root=args.artifact_root,
             host=args.host or DEFAULT_READ_ONLY_RECEIPT_HOST,
             port=args.port or DEFAULT_READ_ONLY_RECEIPT_PORT,
+            daily_admission_path=args.daily_admission,
+            daily_admission_report_path=args.daily_admission_report,
+            daily_admission_root=args.daily_admission_root,
         )
     except ReadOnlyReceiptServiceError as exc:
         print(f"{exc.code}: {exc}", file=sys.stderr)

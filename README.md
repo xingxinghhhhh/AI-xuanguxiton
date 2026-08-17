@@ -1151,3 +1151,25 @@ python -m a_share_ai.cli build-daily-research-admission \
 Only a `ready` result sets `admission_ready=true` and returns exit code `0`;
 stale, unknown-calendar, blocked, and invalid results remain
 `decision_ready=false` and return `1`. Invalid CLI parameters return `2`.
+
+## Read-only daily admission service
+
+Node59 optionally exposes the Node58 state through the existing loopback
+receipt service. Without the three daily options, the original service routes
+and readiness behavior are unchanged.
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --receipt reports/final-receipt/receipt.json \
+  --receipt-report reports/final-receipt/receipt-report.json \
+  --artifact-root reports \
+  --daily-admission reports/daily-admission/daily_research_admission.json \
+  --daily-admission-report reports/daily-admission/daily_research_admission_report.json \
+  --daily-admission-root reports
+```
+
+`GET /v1/research/daily-admission` returns a fixed safe whitelist. `/healthz`
+remains 200 when the input is valid; `/readyz` is 200 only when both the
+original receipt and the daily admission are ready. Stale, blocked,
+calendar-unknown, and invalid admissions make `/readyz` return 503 while
+preserving `decision_ready=false`.
