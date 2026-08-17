@@ -104,6 +104,27 @@ def _start_fake_routes(
     return server, thread, f"http://127.0.0.1:{server.server_address[1]}"
 
 
+def _start_raw_routes(
+    routes: dict[str, tuple[int, bytes]]
+) -> tuple[HTTPServer, threading.Thread, str]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            status, raw = routes.get(self.path, (404, b'{"error":"not_found"}'))
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, format: str, *args: Any) -> None:
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    return server, thread, f"http://127.0.0.1:{server.server_address[1]}"
+
+
 def _receipt_payload() -> dict[str, Any]:
     return {
         "service_version": "read-only-receipt-service-v1",
@@ -130,6 +151,16 @@ def _daily_payload() -> dict[str, Any]:
         "admission_ready": True,
         "issues": [],
         "decision_ready": False,
+    }
+
+
+def _valid_route_payloads() -> dict[str, tuple[int, Any]]:
+    receipt = _receipt_payload()
+    return {
+        "/healthz": (200, receipt),
+        "/readyz": (200, receipt),
+        "/v1/research/receipt": (200, receipt),
+        "/v1/research/daily-admission": (200, _daily_payload()),
     }
 
 
@@ -183,6 +214,9 @@ def test_probe_rejects_daily_symbol_mismatch_and_unc_path() -> None:
         thread.join(timeout=3)
         server.server_close()
 
+
+def test_probe_rejects_unc_path() -> None:
+    receipt = _receipt_payload()
     daily = _daily_payload()
     daily["issues"] = [{"code": "LEAK", "message": r"\\server\share\file"}]
     server, thread, base_url = _start_fake_routes(
@@ -203,6 +237,82 @@ def test_probe_rejects_daily_symbol_mismatch_and_unc_path() -> None:
         thread.join(timeout=3)
         server.server_close()
 
+
+@pytest.mark.parametrize("http_status", [404, 405])
+def test_probe_rejects_missing_or_method_not_allowed_daily_endpoint(http_status: int) -> None:
+    routes = _valid_route_payloads()
+    routes["/v1/research/daily-admission"] = (http_status, {"error": "not_found"})
+    server, thread, base_url = _start_fake_routes(routes)
+    try:
+        report = probe_daily_research_service(base_url=base_url)
+        assert report["status"] == "invalid"
+        assert report["daily_admission_status"] == http_status
+        assert report["decision_ready"] is False
+        assert report["issues"][0]["code"] == "HTTP_STATUS_INVALID"
+        assert daily_research_service_probe_exit_code(report) == 1
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+@pytest.mark.parametrize(
+    "path, raw",
+    [
+        ("/healthz", b"not-json"),
+        ("/readyz", b"not-json"),
+        ("/v1/research/receipt", b"not-json"),
+        ("/v1/research/daily-admission", b"not-json"),
+        ("/v1/research/daily-admission", b"\xff\xfe\x00"),
+    ],
+)
+def test_probe_rejects_invalid_json_or_utf8(path: str, raw: bytes) -> None:
+    routes = _valid_route_payloads()
+    routes_raw = {
+        route: (status, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        for route, (status, payload) in routes.items()
+    }
+    routes_raw[path] = (200, raw)
+    server, thread, base_url = _start_raw_routes(routes_raw)
+    try:
+        report = probe_daily_research_service(base_url=base_url)
+        assert report["status"] == "invalid"
+        assert report["decision_ready"] is False
+        assert report["issues"] == [
+            {"code": "RESPONSE_INVALID", "message": "service response is not JSON"}
+        ]
+        assert daily_research_service_probe_exit_code(report) == 1
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_probe_rejects_redirect() -> None:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1/")
+            self.end_headers()
+
+        def log_message(self, format: str, *args: Any) -> None:
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        report = probe_daily_research_service(base_url=base_url)
+        assert report["status"] == "invalid"
+        assert report["issues"] == [
+            {"code": "REDIRECT_REJECTED", "message": "service redirect is not allowed"}
+        ]
+        assert report["decision_ready"] is False
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
 
 @pytest.mark.parametrize(
     "url",
@@ -313,4 +423,38 @@ def test_probe_cli_invalid_url_returns_exit_two() -> None:
     assert report["status"] == "invalid"
     assert report["issues"] == [
         {"code": "URL_INVALID", "message": "base URL must target loopback"}
+    ]
+
+
+@pytest.mark.parametrize("timeout_text", ["0", "-1", "nan", "inf", "-inf"])
+def test_probe_cli_invalid_timeout_returns_exit_two(timeout_text: str) -> None:
+    timeout_argument = (
+        f"--timeout-seconds={timeout_text}"
+        if timeout_text.startswith("-")
+        else "--timeout-seconds"
+    )
+    timeout_value = None if timeout_text.startswith("-") else timeout_text
+    command = [
+        sys.executable,
+        "-m",
+        "a_share_ai.cli",
+        "probe-daily-research-service",
+        "--base-url",
+        "http://127.0.0.1:8765",
+        timeout_argument,
+    ]
+    if timeout_value is not None:
+        command.append(timeout_value)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["status"] == "invalid"
+    assert report["decision_ready"] is False
+    assert report["issues"] == [
+        {"code": "TIMEOUT_INVALID", "message": "timeout-seconds must be positive"}
     ]
