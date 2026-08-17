@@ -104,6 +104,12 @@ from .market.coverage import CoverageReport, audit_daily_coverage
 from .market.health import HealthReport, ValidationIssue, build_health_report
 from .market.market_context import INDEX_SYMBOLS, MARKET_CONTEXT_VERSION, MarketContextConfig
 from .market.replay import canonical_jsonl, sha256_bytes, write_atomic
+from .service.launch_config import (
+    ReadOnlyReceiptLaunchError,
+    check_read_only_receipt_launch,
+    launch_check_report,
+    serve_read_only_receipt_launch,
+)
 from .service.read_only_receipt_probe import (
     DEFAULT_PROBE_TIMEOUT_SECONDS,
     ReadOnlyReceiptProbeError,
@@ -759,17 +765,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "serve-research-receipt",
         help="serve a validated research receipt over loopback HTTP",
     )
-    receipt_service.add_argument("--receipt", type=Path, required=True)
-    receipt_service.add_argument("--receipt-report", type=Path, required=True)
+    receipt_service.add_argument("--launch-manifest", type=Path)
+    receipt_service.add_argument("--receipt", type=Path)
+    receipt_service.add_argument("--receipt-report", type=Path)
     receipt_service.add_argument("--artifact-root", type=Path, required=True)
     receipt_service.add_argument(
         "--host",
         choices=("127.0.0.1", "::1"),
-        default=DEFAULT_READ_ONLY_RECEIPT_HOST,
     )
-    receipt_service.add_argument(
-        "--port", type=int, default=DEFAULT_READ_ONLY_RECEIPT_PORT
-    )
+    receipt_service.add_argument("--port", type=int)
+    receipt_service.add_argument("--check-only", action="store_true")
 
     receipt_probe = subparsers.add_parser(
         "probe-research-receipt-service",
@@ -1709,13 +1714,51 @@ def run_market_aware_session_history_final_receipt(
 
 
 def run_read_only_receipt_server(args: argparse.Namespace) -> int:
+    if args.launch_manifest is not None:
+        if any(
+            value is not None
+            for value in (args.receipt, args.receipt_report, args.host, args.port)
+        ):
+            print(
+                "CONFIG_INVALID: launch manifest cannot be combined with direct launch options",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            config = check_read_only_receipt_launch(
+                manifest_path=args.launch_manifest,
+                artifact_root=args.artifact_root,
+            )
+            if args.check_only:
+                print(json.dumps(launch_check_report(config), ensure_ascii=False, sort_keys=True))
+                return 0
+            serve_read_only_receipt_launch(config)
+        except ReadOnlyReceiptLaunchError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 2
+        except ReadOnlyReceiptServiceError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 2
+        except KeyboardInterrupt:
+            return 0
+        return 0
+
+    if args.check_only:
+        print("CONFIG_INVALID: --check-only requires --launch-manifest", file=sys.stderr)
+        return 2
+    if args.receipt is None or args.receipt_report is None:
+        print(
+            "CONFIG_INVALID: direct launch requires --receipt and --receipt-report",
+            file=sys.stderr,
+        )
+        return 2
     try:
         serve_read_only_receipt(
             receipt_path=args.receipt,
             receipt_report_path=args.receipt_report,
             artifact_root=args.artifact_root,
-            host=args.host,
-            port=args.port,
+            host=args.host or DEFAULT_READ_ONLY_RECEIPT_HOST,
+            port=args.port or DEFAULT_READ_ONLY_RECEIPT_PORT,
         )
     except ReadOnlyReceiptServiceError as exc:
         print(f"{exc.code}: {exc}", file=sys.stderr)

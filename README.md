@@ -1039,3 +1039,30 @@ service is unavailable, malformed, stale, blocked, or not ready. Exit code `2`
 means the URL or timeout argument is invalid. The probe does not restart,
 retry, write files, or contact external services. It is not a public health
 endpoint and never changes `decision_ready=false`.
+
+## Versioned launch and rollback manifest
+
+Node55 adds a strict, path-bounded launch manifest for deployment handoff. The
+manifest contains the service/probe versions, relative receipt paths, exact
+SHA-256 values, loopback host/port, and `decision_ready=false`. Unknown fields,
+path escapes, hash changes, version mismatches, and invalid Node52/53 receipt
+contracts fail closed.
+
+Check it without binding a port, then start the same configuration:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --launch-manifest reports/service/read_only_receipt_service_launch.json \
+  --artifact-root reports/service \
+  --check-only
+
+python -m a_share_ai.cli serve-research-receipt \
+  --launch-manifest reports/service/read_only_receipt_service_launch.json \
+  --artifact-root reports/service
+```
+
+The manifest and both referenced files must be inside `artifact-root`. The
+direct `--receipt`/`--receipt-report` form remains compatible. Selecting a
+previous valid manifest provides a read-only rollback to its receipt; Node54
+still decides whether the running service is ready. A stale or blocked receipt
+is preserved as such, and every path keeps `decision_ready=false`.
