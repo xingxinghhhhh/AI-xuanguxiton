@@ -26,7 +26,7 @@ _ADMISSION_FRESHNESS = {
     "blocked": "blocked",
     "invalid": "invalid",
 }
-_HANDOFF_STATUSES = {"ready", "blocked", "invalid"}
+_HANDOFF_STATUSES = {"ready", "blocked"}
 _HANDOFF_FIELDS = {
     "handoff_version",
     "status",
@@ -365,6 +365,12 @@ def _validate_admission(
         if admission.get(field) != report.get(field):
             raise DailyResearchHandoffAuditError("FIELD_MISMATCH", f"admission {field} differs")
     has_refs = any(admission.get(field) is not None for field in _ADMISSION_PATH_FIELDS)
+    if admission.get("status") == "ready" and not all(
+        admission.get(field) is not None for field in _ADMISSION_REFERENCE_FIELDS
+    ):
+        raise DailyResearchHandoffAuditError(
+            "ADMISSION_REFERENCES_MISSING", "ready daily admission references are incomplete"
+        )
     if has_refs:
         for path_field, sha_field in (
             ("run_report_path", "run_report_sha256"),
@@ -545,6 +551,21 @@ def audit_daily_research_handoff(
                 raise DailyResearchHandoffAuditError(
                     "CHAIN_MISMATCH", f"handoff {field} differs"
                 )
+        expected_handoff_ready = (
+            run["status"] == "ready"
+            and audit["audit_ready"] is True
+            and admission["status"] == "ready"
+            and admission["admission_ready"] is True
+        )
+        expected_handoff_status = "ready" if expected_handoff_ready else "blocked"
+        if handoff["status"] != expected_handoff_status:
+            raise DailyResearchHandoffAuditError(
+                "CHAIN_MISMATCH", "handoff status does not match upstream state"
+            )
+        if handoff["handoff_ready"] is not expected_handoff_ready:
+            raise DailyResearchHandoffAuditError(
+                "CHAIN_MISMATCH", "handoff readiness does not match upstream state"
+            )
         result.update(
             run_report_path=run_file["relative_path"],
             run_report_sha256=run_file["sha256"],

@@ -126,6 +126,88 @@ def test_audit_rejects_tamper_missing_and_unknown_fields(tmp_path: Path) -> None
     assert unknown["issues"][0]["code"] == "HANDOFF_FIELDS_INVALID"
 
 
+def test_audit_rejects_invalid_or_rewritten_handoff_state(tmp_path: Path) -> None:
+    root = tmp_path / "state"
+    inputs = _prepare_handoff(root)
+    _build_handoff(inputs, root / "handoff")
+    handoff_paths = [
+        root / "handoff/daily_research_handoff.json",
+        root / "handoff/daily_research_handoff_report.json",
+    ]
+    for path in handoff_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["status"] = "invalid"
+        _write_json(path, _sign(payload))
+    invalid = audit_daily_research_handoff(
+        handoff_path=handoff_paths[0],
+        handoff_report_path=handoff_paths[1],
+        artifact_root=root,
+        output_dir=root / "audit-invalid",
+    )
+    assert invalid["audit_ready"] is False
+    assert invalid["issues"][0]["code"] == "STATUS_INVALID"
+
+    root = tmp_path / "rewritten"
+    inputs = _prepare_handoff(root)
+    _build_handoff(inputs, root / "handoff")
+    handoff_paths = [
+        root / "handoff/daily_research_handoff.json",
+        root / "handoff/daily_research_handoff_report.json",
+    ]
+    for path in handoff_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["status"] = "blocked"
+        payload["handoff_ready"] = False
+        _write_json(path, _sign(payload))
+    rewritten = audit_daily_research_handoff(
+        handoff_path=handoff_paths[0],
+        handoff_report_path=handoff_paths[1],
+        artifact_root=root,
+        output_dir=root / "audit-rewritten",
+    )
+    assert rewritten["audit_ready"] is False
+    assert rewritten["issues"][0]["code"] == "CHAIN_MISMATCH"
+
+
+def test_ready_admission_must_have_all_internal_references(tmp_path: Path) -> None:
+    root = tmp_path / "admission-refs"
+    inputs = _prepare_handoff(root)
+    _build_handoff(inputs, root / "handoff")
+    for path in (inputs["admission"], inputs["admission_report"]):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for field in (
+            "run_report_path",
+            "run_audit_report_path",
+            "calendar_path",
+            "calendar_report_path",
+            "run_report_sha256",
+            "run_audit_report_sha256",
+            "calendar_sha256",
+            "calendar_report_sha256",
+        ):
+            payload[field] = None
+        _write_json(path, _sign(payload))
+    handoff_paths = [
+        root / "handoff/daily_research_handoff.json",
+        root / "handoff/daily_research_handoff_report.json",
+    ]
+    for path in handoff_paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["admission_sha256"] = sha256_bytes(inputs["admission"].read_bytes())
+        payload["admission_report_sha256"] = sha256_bytes(
+            inputs["admission_report"].read_bytes()
+        )
+        _write_json(path, _sign(payload))
+    result = audit_daily_research_handoff(
+        handoff_path=handoff_paths[0],
+        handoff_report_path=handoff_paths[1],
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+    assert result["audit_ready"] is False
+    assert result["issues"][0]["code"] == "ADMISSION_REFERENCES_MISSING"
+
+
 def test_audit_rejects_path_escape_and_symlink_escape(tmp_path: Path) -> None:
     root = tmp_path / "paths"
     inputs = _prepare_handoff(root)
