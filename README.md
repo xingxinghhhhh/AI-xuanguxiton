@@ -1066,3 +1066,44 @@ direct `--receipt`/`--receipt-report` form remains compatible. Selecting a
 previous valid manifest provides a read-only rollback to its receipt; Node54
 still decides whether the running service is ready. A stale or blocked receipt
 is preserved as such, and every path keeps `decision_ready=false`.
+
+## One-shot daily research refresh
+
+Node56 adds a manually triggered, single-stock, single-pass public-data run. It
+reuses the existing Baostock daily and benchmark adapters, calendar/health and
+coverage audits, technical features and price plan, quarterly fundamentals,
+CNINFO announcements, and the `analysis-input-v2` builder.
+
+The strict runtime spec and all referenced files must be under `input-root`.
+Use one consistent point-in-time value for `as_of` and `received_at`:
+
+```json
+{
+  "run_version": "daily-research-run-v1",
+  "symbol": "600000.SH",
+  "start_date": "2026-08-01",
+  "end_date": "2026-08-10",
+  "as_of": "2026-08-10T12:00:00+00:00",
+  "received_at": "2026-08-10T12:00:00+00:00",
+  "calendar_path": "market/calendar.json",
+  "fundamentals_start": {"year": 2025, "quarter": 1},
+  "fundamentals_end": {"year": 2026, "quarter": 2},
+  "announcement_start": "2026-01-01",
+  "announcement_end": "2026-08-10"
+}
+```
+
+Run it explicitly:
+
+```bash
+python -m a_share_ai.cli run-daily-research \
+  --spec runtime_spec.json \
+  --input-root reports \
+  --output-dir reports/daily-run-001 \
+  --source-mode public-read-only
+```
+
+The run produces a stage-by-stage `daily_research_run_report.json`. A failed
+stage stops the run and marks later stages `skipped`; there are no retries,
+provider fallbacks, schedules, multi-stock scans, DeepSeek calls, trading
+actions, or BUY/SELL/HOLD outputs. Every result keeps `decision_ready=false`.
