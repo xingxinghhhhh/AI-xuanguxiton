@@ -223,7 +223,9 @@ def test_stale_service_is_live_but_not_ready_and_redacts_issue_paths(tmp_path: P
         server.server_close()
 
 
-@pytest.mark.parametrize("daily_status, expected_ready", [("ready", True), ("stale", False)])
+@pytest.mark.parametrize(
+    "daily_status, expected_ready", [("ready", True), ("stale", False), ("blocked", False)]
+)
 def test_daily_admission_routes_and_ready_gate(
     tmp_path: Path, daily_status: str, expected_ready: bool
 ) -> None:
@@ -247,6 +249,15 @@ def test_daily_admission_routes_and_ready_gate(
         status, health = _request(base_url, "/healthz")
         assert status == 200
         assert "daily_admission" not in health
+        assert health["receipt_ready"] is expected_ready
+        if expected_ready:
+            assert health["status"] == "ready"
+        else:
+            assert health["status"] == daily_status
+            assert health["issues"][-1] == {
+                "code": "DAILY_ADMISSION_NOT_READY",
+                "message": f"daily admission status is {daily_status}",
+            }
         status, ready = _request(base_url, "/readyz")
         assert status == (200 if expected_ready else 503)
         assert health == ready
@@ -275,9 +286,17 @@ def test_daily_admission_routes_and_ready_gate(
         server.server_close()
 
 
-def test_daily_admission_service_remains_compatible_with_node54_probe(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "daily_status, expected_probe_status",
+    [("ready", "ready"), ("stale", "blocked"), ("blocked", "blocked")],
+)
+def test_daily_admission_service_remains_compatible_with_node54_probe(
+    tmp_path: Path, daily_status: str, expected_probe_status: str
+) -> None:
     receipt_path, report_path = _write_input_pair(tmp_path)
-    daily_path, daily_report_path, daily_root = _write_daily_admission_pair(tmp_path)
+    daily_path, daily_report_path, daily_root = _write_daily_admission_pair(
+        tmp_path, status=daily_status
+    )
     server = create_read_only_receipt_server(
         receipt_path=receipt_path,
         receipt_report_path=report_path,
@@ -292,9 +311,9 @@ def test_daily_admission_service_remains_compatible_with_node54_probe(tmp_path: 
     base_url = f"http://127.0.0.1:{server.server_address[1]}"
     try:
         probe = probe_read_only_receipt_service(base_url=base_url)
-        assert probe_exit_code(probe) == 0
-        assert probe["status"] == "ready"
-        assert probe["ready_http_status"] == 200
+        assert probe_exit_code(probe) == (0 if expected_probe_status == "ready" else 1)
+        assert probe["status"] == expected_probe_status
+        assert probe["ready_http_status"] == (200 if expected_probe_status == "ready" else 503)
     finally:
         server.shutdown()
         thread.join(timeout=3)

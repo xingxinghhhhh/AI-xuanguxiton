@@ -1169,7 +1169,9 @@ python -m a_share_ai.cli serve-research-receipt \
 ```
 
 `GET /v1/research/daily-admission` returns a fixed safe whitelist. `/healthz`
-remains 200 when the input is valid; `/readyz` is 200 only when both the
-original receipt and the daily admission are ready. Stale, blocked,
+remains 200 when the input is valid; when daily admission is configured, the
+legacy `/healthz`, `/readyz`, and `/v1/research/receipt` summaries expose one
+combined Node54-probe-compatible readiness state. `/readyz` is 200 only when
+both the original receipt and the daily admission are ready. Stale, blocked,
 calendar-unknown, and invalid admissions make `/readyz` return 503 while
 preserving `decision_ready=false`.

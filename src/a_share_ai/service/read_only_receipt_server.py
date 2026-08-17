@@ -415,6 +415,29 @@ class _ReceiptRequestHandler(BaseHTTPRequestHandler):
         return
 
 
+def _combine_daily_admission_readiness(
+    summary: dict[str, Any], daily_summary: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Expose one probe-compatible readiness summary for all legacy routes."""
+
+    if daily_summary is None or daily_summary["admission_ready"]:
+        return summary
+    if not summary["receipt_ready"]:
+        return summary
+    combined = dict(summary)
+    daily_status = daily_summary["status"]
+    combined["status"] = daily_status if daily_status in {"stale", "blocked"} else "blocked"
+    combined["receipt_ready"] = False
+    combined["issues"] = [
+        *summary["issues"],
+        {
+            "code": "DAILY_ADMISSION_NOT_READY",
+            "message": f"daily admission status is {combined['status']}",
+        },
+    ]
+    return combined
+
+
 def create_read_only_receipt_server(
     *,
     receipt_path: Path,
@@ -451,6 +474,7 @@ def create_read_only_receipt_server(
             admission_report_path=daily_admission_report_path,
             artifact_root=daily_admission_root,
         )
+    exposed_summary = _combine_daily_admission_readiness(summary, daily_summary)
     try:
         server_class = _ReceiptHTTPServerV6 if host == "::1" else _ReceiptHTTPServer
         server = server_class((host, port), _ReceiptRequestHandler)
@@ -458,7 +482,7 @@ def create_read_only_receipt_server(
         raise ReadOnlyReceiptServiceError(
             "BIND_FAILED", "could not bind service host and port"
         ) from exc
-    server.summary = summary
+    server.summary = exposed_summary
     server.daily_admission_summary = daily_summary
     return server
 

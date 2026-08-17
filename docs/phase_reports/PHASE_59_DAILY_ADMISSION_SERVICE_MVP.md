@@ -28,8 +28,13 @@ version, symbol, timestamps, status, freshness status, admission gate, issues,
 and `decision_ready`. It does not expose artifact paths or filesystem details.
 
 `/healthz` remains HTTP 200 when the receipt and optional admission inputs are
-valid. `/readyz` returns HTTP 200 only when the original receipt is ready and,
-when configured, `admission_ready=true`. Stale, blocked,
+valid. When daily admission is configured, the three legacy summary routes
+(`/healthz`, `/readyz`, and `/v1/research/receipt`) expose one combined,
+Node54-probe-compatible readiness summary: a non-ready daily admission makes
+the exposed `receipt_ready` false and `/readyz` return HTTP 503. The detailed
+daily status remains available only from the dedicated route. `/readyz` returns
+HTTP 200 only when the original receipt is ready and, when configured,
+`admission_ready=true`. Stale, blocked,
 calendar-unknown, or invalid daily input therefore keeps the service live but
 not ready. Without daily options, Node53 behavior is unchanged.
 
