@@ -1129,3 +1129,25 @@ an auditable but blocked upstream run exits `1`, and invalid CLI parameters
 exit `2`;
 any missing, changed, out-of-root, incomplete, misordered, or decision-enabled
 input fails closed.
+
+## Daily research freshness admission
+
+Node58 adds a read-only admission check that combines a ready Node56 run, its
+Node57 audit, and a versioned trading calendar. It evaluates the run at an
+explicit `evaluation_at` using the Asia/Shanghai 15:00 close boundary and
+returns `ready`, `stale`, `calendar_unknown`, `blocked`, or `invalid`.
+
+```bash
+python -m a_share_ai.cli build-daily-research-admission \
+  --run-report reports/daily-run-001/daily_research_run_report.json \
+  --run-audit-report reports/daily-run-001-audit/daily_research_run_audit_report.json \
+  --calendar reports/calendar.json \
+  --calendar-report reports/calendar_report.json \
+  --evaluation-at 2026-08-17T13:00:00+00:00 \
+  --artifact-root reports \
+  --output-dir reports/daily-admission
+```
+
+Only a `ready` result sets `admission_ready=true` and returns exit code `0`;
+stale, unknown-calendar, blocked, and invalid results remain
+`decision_ready=false` and return `1`. Invalid CLI parameters return `2`.
