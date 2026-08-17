@@ -147,7 +147,7 @@ def _daily_payload() -> dict[str, Any]:
         "as_of": "2026-08-10T08:00:00+00:00",
         "evaluation_at": "2026-08-10T16:00:00+08:00",
         "status": "ready",
-        "freshness_status": "ready",
+        "freshness_status": "fresh",
         "admission_ready": True,
         "issues": [],
         "decision_ready": False,

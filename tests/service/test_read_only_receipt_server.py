@@ -125,7 +125,7 @@ def _write_daily_admission_pair(
         "evaluation_at": "2026-08-10T16:00:00+08:00",
         "expected_latest_trading_date": "2026-08-10" if ready else "2026-08-11",
         "status": status,
-        "freshness_status": status,
+        "freshness_status": "fresh" if ready else status,
         "audit_ready": ready,
         "analysis_input_ready": ready,
         "admission_ready": ready,

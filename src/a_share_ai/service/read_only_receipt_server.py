@@ -287,7 +287,10 @@ def load_daily_research_admission_summary(
             )
         if payload.get("status") not in _DAILY_ADMISSION_STATUSES:
             raise ReadOnlyReceiptServiceError("REPORT_INVALID", f"{label} status is invalid")
-        if payload.get("freshness_status") != payload.get("status"):
+        expected_freshness_status = (
+            "fresh" if payload.get("status") == "ready" else payload.get("status")
+        )
+        if payload.get("freshness_status") != expected_freshness_status:
             raise ReadOnlyReceiptServiceError("FIELD_MISMATCH", f"{label} freshness status differs")
         for field in ("audit_ready", "analysis_input_ready", "admission_ready"):
             if not isinstance(payload.get(field), bool):

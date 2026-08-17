@@ -105,6 +105,10 @@ from .market.health import HealthReport, ValidationIssue, build_health_report
 from .market.market_context import INDEX_SYMBOLS, MARKET_CONTEXT_VERSION, MarketContextConfig
 from .market.replay import canonical_jsonl, sha256_bytes, write_atomic
 from .runtime.daily_research_admission import build_daily_research_admission
+from .runtime.daily_research_handoff import (
+    DailyResearchHandoffError,
+    build_daily_research_handoff,
+)
 from .runtime.daily_research_run import DailyResearchRunError, run_daily_research
 from .runtime.daily_research_run_audit import audit_daily_research_run
 from .service.daily_research_service_probe import (
@@ -296,6 +300,17 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_admission.add_argument("--evaluation-at", type=_parse_as_of, required=True)
     daily_admission.add_argument("--artifact-root", type=Path, required=True)
     daily_admission.add_argument("--output-dir", type=Path, required=True)
+
+    daily_handoff = subparsers.add_parser(
+        "build-daily-research-handoff",
+        help="build a read-only daily research startup handoff",
+    )
+    daily_handoff.add_argument("--run-report", type=Path, required=True)
+    daily_handoff.add_argument("--run-audit-report", type=Path, required=True)
+    daily_handoff.add_argument("--admission", type=Path, required=True)
+    daily_handoff.add_argument("--admission-report", type=Path, required=True)
+    daily_handoff.add_argument("--artifact-root", type=Path, required=True)
+    daily_handoff.add_argument("--output-dir", type=Path, required=True)
 
     analysis = subparsers.add_parser(
         "analyze-input", help="build an evidence-backed research analysis report"
@@ -1378,6 +1393,23 @@ def run_daily_research_admission_command(args: argparse.Namespace) -> int:
     return 0 if report.get("admission_ready") is True else 1
 
 
+def run_daily_research_handoff_command(args: argparse.Namespace) -> int:
+    try:
+        report = build_daily_research_handoff(
+            run_report_path=args.run_report,
+            run_audit_report_path=args.run_audit_report,
+            admission_path=args.admission,
+            admission_report_path=args.admission_report,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchHandoffError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("handoff_ready") is True else 1
+
+
 def run_analysis_report(args: argparse.Namespace) -> int:
     if args.provider == "offline" and args.response_fixture is None:
         raise SystemExit("analyze-input --provider offline requires --response-fixture")
@@ -2050,6 +2082,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_audit_command(args)
     if args.command == "build-daily-research-admission":
         return run_daily_research_admission_command(args)
+    if args.command == "build-daily-research-handoff":
+        return run_daily_research_handoff_command(args)
     if args.command == "analyze-input":
         return run_analysis_report(args)
     if args.command == "replay-market-aware-analysis":

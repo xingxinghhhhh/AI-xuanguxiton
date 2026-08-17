@@ -179,7 +179,10 @@ def _validate_daily_summary(payload: Any) -> dict[str, Any]:
         raise DailyResearchServiceProbeError(
             "RESPONSE_INVALID", "daily admission status is invalid"
         )
-    if payload.get("freshness_status") != payload.get("status"):
+    expected_freshness_status = (
+        "fresh" if payload.get("status") == "ready" else payload.get("status")
+    )
+    if payload.get("freshness_status") != expected_freshness_status:
         raise DailyResearchServiceProbeError(
             "RESPONSE_INVALID", "daily admission freshness status is invalid"
         )

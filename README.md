@@ -1192,3 +1192,25 @@ Exit `0` means the service and daily admission are ready with
 blocked/not ready; invalid URL or timeout arguments return exit `2`. The probe
 is loopback-only, disables proxies, rejects redirects and sensitive paths, and
 does not write files.
+
+## Controlled daily research startup handoff
+
+Node61 aggregates the existing run, audit, and admission artifacts into a
+deterministic handoff package for manual service startup:
+
+```bash
+python -m a_share_ai.cli build-daily-research-handoff \
+  --run-report reports/daily-run-001/daily_research_run_report.json \
+  --run-audit-report reports/daily-run-001-audit/daily_research_run_audit_report.json \
+  --admission reports/daily-admission/daily_research_admission.json \
+  --admission-report reports/daily-admission/daily_research_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-handoff
+```
+
+The handoff is read-only: it validates exact versions, self-hashes, bounded
+paths, artifact hashes, symbol/time consistency, and `decision_ready=false`.
+Only a mutually consistent ready chain returns exit `0` and
+`handoff_ready=true`; stale or blocked inputs return `1`, while invalid
+configuration or contracts return `2`. It does not start services, write a
+launch manifest, access external APIs, or authorize trading.
