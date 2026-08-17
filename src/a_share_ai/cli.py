@@ -105,6 +105,7 @@ from .market.health import HealthReport, ValidationIssue, build_health_report
 from .market.market_context import INDEX_SYMBOLS, MARKET_CONTEXT_VERSION, MarketContextConfig
 from .market.replay import canonical_jsonl, sha256_bytes, write_atomic
 from .runtime.daily_research_run import DailyResearchRunError, run_daily_research
+from .runtime.daily_research_run_audit import audit_daily_research_run
 from .service.launch_config import (
     ReadOnlyReceiptLaunchError,
     check_read_only_receipt_launch,
@@ -267,6 +268,14 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_research.add_argument(
         "--source-mode", choices=("public-read-only",), default="public-read-only"
     )
+
+    daily_research_audit = subparsers.add_parser(
+        "audit-daily-research-run",
+        help="audit one bounded daily research run and its artifacts",
+    )
+    daily_research_audit.add_argument("--run-report", type=Path, required=True)
+    daily_research_audit.add_argument("--artifact-root", type=Path, required=True)
+    daily_research_audit.add_argument("--output-dir", type=Path, required=True)
 
     analysis = subparsers.add_parser(
         "analyze-input", help="build an evidence-backed research analysis report"
@@ -1363,6 +1372,16 @@ def run_daily_research_command(args: argparse.Namespace) -> int:
     return 0 if report.get("analysis_input_ready") is True else 1
 
 
+def run_daily_research_audit_command(args: argparse.Namespace) -> int:
+    report = audit_daily_research_run(
+        run_report_path=args.run_report,
+        artifact_root=args.artifact_root,
+        output_dir=args.output_dir,
+    )
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("audit_ready") is True else 1
+
+
 def run_analysis_report(args: argparse.Namespace) -> int:
     if args.provider == "offline" and args.response_fixture is None:
         raise SystemExit("analyze-input --provider offline requires --response-fixture")
@@ -1966,6 +1985,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_analysis_input(args)
     if args.command == "run-daily-research":
         return run_daily_research_command(args)
+    if args.command == "audit-daily-research-run":
+        return run_daily_research_audit_command(args)
     if args.command == "analyze-input":
         return run_analysis_report(args)
     if args.command == "replay-market-aware-analysis":

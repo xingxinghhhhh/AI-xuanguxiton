@@ -1107,3 +1107,23 @@ The run produces a stage-by-stage `daily_research_run_report.json`. A failed
 stage stops the run and marks later stages `skipped`; there are no retries,
 provider fallbacks, schedules, multi-stock scans, DeepSeek calls, trading
 actions, or BUY/SELL/HOLD outputs. Every result keeps `decision_ready=false`.
+
+## Daily research run audit
+
+Node57 independently audits an existing run without re-running providers or
+reading API keys. It verifies the fixed nine-stage order, fail-closed
+ready/blocked flow, controlled relative paths, artifact SHA-256 values, the
+`analysis-input-v2` chain, and the non-trading `decision_ready=false` gate.
+
+```bash
+python -m a_share_ai.cli audit-daily-research-run \
+  --run-report reports/daily-run-001/daily_research_run_report.json \
+  --artifact-root reports/daily-run-001 \
+  --output-dir reports/daily-run-001-audit
+```
+
+The audit writes `daily_research_run_audit_report.json` with versioned run
+metadata, the failed stage when blocked, issues, and a deterministic
+`output_sha256` self-hash. The command exits `0` only when `audit_ready=true`;
+any missing, changed, out-of-root, incomplete, misordered, or decision-enabled
+input fails closed.
