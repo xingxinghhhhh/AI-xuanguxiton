@@ -487,7 +487,8 @@ def run_daily_research(
         lambda report: isinstance(report, Mapping)
         and report.get("error") is None
         and isinstance(report.get("bar_count"), int)
-        and report["bar_count"] > 0,
+        and report["bar_count"] > 0
+        and report.get("decision_ready") is False,
     )
     if daily_ready:
         state["daily_path"] = daily_dir / "normalized_daily.jsonl"
@@ -533,7 +534,7 @@ def run_daily_research(
                 as_of=spec.as_of,
                 input_sha256=sha256_bytes(bars_bytes),
                 output_sha256=sha256_bytes(output_bytes),
-                source="daily-research-run",
+                source="jsonl-replay",
                 parse_issues=parse_issues,
                 stale_after=timedelta(hours=24),
             )

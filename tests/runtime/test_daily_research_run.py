@@ -256,6 +256,29 @@ def test_provider_failure_stops_later_stages_and_writes_report(
     assert "provider unavailable" in report["issues"][0]["message"]
 
 
+def test_daily_capture_decision_gate_is_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec_path = _write_spec(tmp_path)
+
+    class _UnsafeDailySource(_FakeDailySource):
+        def capture(self, output_dir: Path) -> dict[str, Any]:
+            _write_daily_artifacts(output_dir)
+            return {"bar_count": 1, "error": None, "decision_ready": True}
+
+    monkeypatch.setattr(runtime, "BaostockDailySource", _UnsafeDailySource)
+    report = run_daily_research(
+        spec_path=spec_path,
+        input_root=tmp_path,
+        output_dir=tmp_path / "run",
+        source_mode="public-read-only",
+    )
+
+    assert report["stages"][0]["status"] == "failed"
+    assert report["stages"][0]["error_code"] == "STAGE_NOT_READY"
+    assert report["stages"][1]["status"] == "skipped"
+
+
 def test_successful_run_is_single_pass_and_keeps_read_only_gate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -276,6 +299,25 @@ def test_successful_run_is_single_pass_and_keeps_read_only_gate(
     assert all(stage["status"] == "ready" for stage in report["stages"])
     assert report["analysis_input_path"] == "run/analysis-input/analysis_input_bundle.json"
     assert report["analysis_input_sha256"]
+
+
+def test_real_analysis_input_builder_accepts_runtime_health_source(tmp_path: Path) -> None:
+    from a_share_ai.evidence.analysis_input_bundle import AnalysisInputSource
+    from tests.evidence.test_analysis_input_bundle import add_market_context, build_artifacts
+
+    config = add_market_context(build_artifacts(tmp_path / "input"))
+    health_path = config.market_health_report
+    health = json.loads(health_path.read_text(encoding="utf-8"))
+    health["source"] = "jsonl-replay"
+    health_path.write_text(json.dumps(health) + "\n", encoding="utf-8")
+
+    report = AnalysisInputSource(config).capture(tmp_path / "bundle")
+
+    assert report["analysis_input_ready"] is True
+    bundle = json.loads(
+        (tmp_path / "bundle" / "analysis_input_bundle.json").read_text(encoding="utf-8")
+    )
+    assert bundle["bundle_version"] == "analysis-input-v2"
 
 
 def test_cli_invalid_spec_returns_parameter_error(tmp_path: Path) -> None:
