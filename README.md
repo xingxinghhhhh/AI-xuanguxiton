@@ -1273,3 +1273,25 @@ python -m a_share_ai.cli serve-research-receipt \
 Node55 `--launch-manifest` startup paths remain compatible, and Node60 keeps
 using the existing read-only four-route probe. The gate never refreshes data,
 calls external APIs, schedules work, or authorizes trading.
+
+## Independent daily research service launch gate audit
+
+Before starting a daily read-only service, Node64 can independently verify the
+Node63 gate and its referenced artifact chain:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-launch-gate \
+  --gate reports/daily-service-gate/daily_research_service_launch_gate.json \
+  --gate-report reports/daily-service-gate/daily_research_service_launch_gate_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-gate-audit
+```
+
+The audit writes `daily_research_service_launch_gate_audit_report.json` with
+a deterministic self-hash. It rechecks the gate/report pair, Node55 launch
+manifest, Node61 handoff/report, Node62 handoff audit, and daily
+admission/report paths and SHAs, and independently derives status/readiness.
+It accepts valid ready, stale, and blocked gates for audit only; any tamper,
+missing input, artifact-root escape, version mismatch, or inconsistent state is
+fail-closed. The command never rebuilds the gate, starts the service, calls
+Node60, uses the network, or changes `decision_ready=false`.

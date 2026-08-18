@@ -121,6 +121,10 @@ from .service.daily_research_service_launch_gate import (
     check_daily_research_service_launch_gate,
     daily_research_service_launch_gate_check_report,
 )
+from .service.daily_research_service_launch_gate_audit import (
+    DailyResearchServiceLaunchGateAuditError,
+    audit_daily_research_service_launch_gate,
+)
 from .service.daily_research_service_probe import (
     DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
     DailyResearchServiceProbeError,
@@ -341,6 +345,15 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_service_gate.add_argument("--launch-manifest", type=Path, required=True)
     daily_service_gate.add_argument("--artifact-root", type=Path, required=True)
     daily_service_gate.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_gate_audit = subparsers.add_parser(
+        "audit-daily-research-service-launch-gate",
+        help="independently audit a daily read-only service launch gate",
+    )
+    daily_service_gate_audit.add_argument("--gate", type=Path, required=True)
+    daily_service_gate_audit.add_argument("--gate-report", type=Path, required=True)
+    daily_service_gate_audit.add_argument("--artifact-root", type=Path, required=True)
+    daily_service_gate_audit.add_argument("--output-dir", type=Path, required=True)
 
     analysis = subparsers.add_parser(
         "analyze-input", help="build an evidence-backed research analysis report"
@@ -1474,6 +1487,21 @@ def run_daily_research_service_launch_gate_command(args: argparse.Namespace) -> 
     return 0 if report.get("gate_ready") is True else 1
 
 
+def run_daily_research_service_launch_gate_audit_command(args: argparse.Namespace) -> int:
+    try:
+        report = audit_daily_research_service_launch_gate(
+            gate_path=args.gate,
+            gate_report_path=args.gate_report,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceLaunchGateAuditError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("audit_ready") is True else 1
+
+
 def run_analysis_report(args: argparse.Namespace) -> int:
     if args.provider == "offline" and args.response_fixture is None:
         raise SystemExit("analyze-input --provider offline requires --response-fixture")
@@ -2214,6 +2242,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_handoff_audit_command(args)
     if args.command == "build-daily-research-service-launch-gate":
         return run_daily_research_service_launch_gate_command(args)
+    if args.command == "audit-daily-research-service-launch-gate":
+        return run_daily_research_service_launch_gate_audit_command(args)
     if args.command == "analyze-input":
         return run_analysis_report(args)
     if args.command == "replay-market-aware-analysis":

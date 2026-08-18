@@ -9,6 +9,11 @@ from .daily_research_service_launch_gate import (
     daily_research_service_launch_gate_check_report,
     load_daily_research_service_launch_gate,
 )
+from .daily_research_service_launch_gate_audit import (
+    DAILY_RESEARCH_SERVICE_LAUNCH_GATE_AUDIT_VERSION,
+    DailyResearchServiceLaunchGateAuditError,
+    audit_daily_research_service_launch_gate,
+)
 from .daily_research_service_probe import (
     DAILY_RESEARCH_SERVICE_PROBE_VERSION,
     DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
@@ -52,6 +57,9 @@ __all__ = [
     "check_daily_research_service_launch_gate",
     "daily_research_service_launch_gate_check_report",
     "load_daily_research_service_launch_gate",
+    "DAILY_RESEARCH_SERVICE_LAUNCH_GATE_AUDIT_VERSION",
+    "DailyResearchServiceLaunchGateAuditError",
+    "audit_daily_research_service_launch_gate",
     "READ_ONLY_RECEIPT_SERVICE_VERSION",
     "ReadOnlyReceiptServiceError",
     "create_read_only_receipt_server",
