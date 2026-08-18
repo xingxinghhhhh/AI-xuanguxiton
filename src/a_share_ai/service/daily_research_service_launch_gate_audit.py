@@ -139,6 +139,49 @@ _LAUNCH_FIELDS = {
     "port",
     "decision_ready",
 }
+_RECEIPT_FIELDS = {
+    "admission_ready",
+    "admission_report_sha256",
+    "admission_sha256",
+    "audit_ready",
+    "decision_ready",
+    "first_as_of",
+    "issues",
+    "last_as_of",
+    "output_sha256",
+    "package_count",
+    "receipt_ready",
+    "receipt_version",
+    "render_audit_report_sha256",
+    "render_ready",
+    "render_report_sha256",
+    "status",
+    "symbol",
+}
+_RECEIPT_REPORT_FIELDS = {
+    "admission_ready",
+    "artifact_root",
+    "audit_ready",
+    "decision_ready",
+    "first_as_of",
+    "inputs",
+    "issues",
+    "last_as_of",
+    "output_sha256",
+    "package_count",
+    "receipt_ready",
+    "receipt_sha256",
+    "receipt_version",
+    "render_ready",
+    "status",
+    "symbol",
+}
+_RECEIPT_INPUT_ROLES = (
+    "admission",
+    "admission_report",
+    "render_report",
+    "render_audit_report",
+)
 _AUDIT_OUTPUT_FIELDS = {
     "audit_version",
     "gate_path",
@@ -273,6 +316,26 @@ def _safe_relative(value: Any, *, root: Path, label: str) -> tuple[Path, str]:
     return candidate, normalized
 
 
+def _safe_relative_reference(value: Any, *, root: Path, label: str) -> str:
+    """Validate a bounded historical reference without requiring its file to exist."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise DailyResearchServiceLaunchGateAuditError("PATH_INVALID", f"{label} is invalid")
+    pure = PureWindowsPath(value)
+    if pure.is_absolute() or pure.drive or any(part in {"", ".", ".."} for part in pure.parts):
+        raise DailyResearchServiceLaunchGateAuditError("PATH_INVALID", f"{label} is invalid")
+    normalized = value.replace("\\", "/")
+    if normalized != "/".join(pure.parts):
+        raise DailyResearchServiceLaunchGateAuditError("PATH_INVALID", f"{label} is not normalized")
+    try:
+        (root / normalized).resolve().relative_to(root.resolve())
+    except (OSError, ValueError) as exc:
+        raise DailyResearchServiceLaunchGateAuditError(
+            "PATH_OUTSIDE_ARTIFACT_ROOT", f"{label} escapes artifact root"
+        ) from exc
+    return normalized
+
+
 def _safe_file(path: Path, *, root: Path, label: str) -> tuple[Path, str, str]:
     try:
         candidate = path.resolve()
@@ -319,7 +382,15 @@ def _validate_pair(
 
 def _validate_receipt_pair(
     receipt: Mapping[str, Any], report: Mapping[str, Any], *, receipt_sha: str, root: Path
-) -> bool:
+) -> dict[str, Any]:
+    if set(receipt) != _RECEIPT_FIELDS:
+        raise DailyResearchServiceLaunchGateAuditError(
+            "SCHEMA_INVALID", "receipt fields are invalid"
+        )
+    if set(report) != _RECEIPT_REPORT_FIELDS:
+        raise DailyResearchServiceLaunchGateAuditError(
+            "SCHEMA_INVALID", "receipt report fields are invalid"
+        )
     _validate_self_hash(receipt, label="receipt")
     _validate_self_hash(report, label="receipt report")
     if report.get("receipt_sha256") != receipt_sha:
@@ -367,34 +438,68 @@ def _validate_receipt_pair(
         raise DailyResearchServiceLaunchGateAuditError(
             "DECISION_GATE_INVALID", "receipt decision_ready must be false"
         )
+    if receipt["receipt_ready"] is not (
+        receipt["admission_ready"] and receipt["render_ready"] and receipt["audit_ready"]
+    ):
+        raise DailyResearchServiceLaunchGateAuditError(
+            "STATE_INVALID", "receipt readiness differs from upstream fields"
+        )
     if receipt["receipt_ready"] is not (receipt["status"] == "ready"):
         raise DailyResearchServiceLaunchGateAuditError(
-            "STATE_INVALID", "receipt readiness differs from status"
+            "STATE_INVALID", "receipt status/readiness differs"
+        )
+    if report.get("artifact_root") != ".":
+        raise DailyResearchServiceLaunchGateAuditError(
+            "PATH_INVALID", "receipt report artifact_root is invalid"
         )
     _validate_issues(receipt.get("issues"), label="receipt")
     inputs = report.get("inputs")
-    if not isinstance(inputs, Mapping):
+    if not isinstance(inputs, Mapping) or set(inputs) != set(_RECEIPT_INPUT_ROLES):
         raise DailyResearchServiceLaunchGateAuditError(
             "SCHEMA_INVALID", "receipt report inputs are invalid"
         )
-    for role, item in inputs.items():
-        if not isinstance(role, str) or not isinstance(item, Mapping):
+    paths: set[str] = set()
+    for role in _RECEIPT_INPUT_ROLES:
+        item = inputs[role]
+        if not isinstance(item, Mapping) or set(item) != {"byte_count", "path", "sha256"}:
             raise DailyResearchServiceLaunchGateAuditError(
-                "SCHEMA_INVALID", "receipt report inputs are invalid"
+                "SCHEMA_INVALID", f"receipt report input {role} is invalid"
             )
         value = item.get("path")
-        if not isinstance(value, str) or Path(value).is_absolute():
+        normalized = _safe_relative_reference(
+            value, root=root, label=f"receipt report input {role}"
+        )
+        if normalized in paths:
             raise DailyResearchServiceLaunchGateAuditError(
-                "PATH_INVALID", "receipt report input path is invalid"
+                "PATH_INVALID", "receipt report inputs are not distinct"
             )
-        try:
-            resolved = (root / value).resolve()
-            resolved.relative_to(root.resolve())
-        except (OSError, ValueError) as exc:
+        paths.add(normalized)
+        if (
+            isinstance(item.get("byte_count"), bool)
+            or not isinstance(item.get("byte_count"), int)
+            or item["byte_count"] < 0
+        ):
             raise DailyResearchServiceLaunchGateAuditError(
-                "PATH_OUTSIDE_ARTIFACT_ROOT", "receipt report input escapes artifact root"
-            ) from exc
-    return receipt["receipt_ready"]
+                "FIELD_INVALID", f"receipt report input {role} byte_count is invalid"
+            )
+        _validate_sha(item.get("sha256"), label=f"receipt report input {role} SHA")
+    for role, receipt_field in (
+        ("admission", "admission_sha256"),
+        ("admission_report", "admission_report_sha256"),
+        ("render_report", "render_report_sha256"),
+        ("render_audit_report", "render_audit_report_sha256"),
+    ):
+        if receipt[receipt_field] != inputs[role]["sha256"]:
+            raise DailyResearchServiceLaunchGateAuditError(
+                "CHAIN_MISMATCH", f"receipt {receipt_field} differs from report inputs"
+            )
+    for field in ("first_as_of", "last_as_of"):
+        _parse_time(receipt.get(field), label=f"receipt.{field}")
+    return {
+        "receipt_ready": receipt["receipt_ready"],
+        "receipt_status": receipt["status"],
+        "receipt_symbol": receipt["symbol"],
+    }
 
 
 def _validate_launch_manifest(
@@ -447,13 +552,10 @@ def _validate_launch_manifest(
         )
     receipt = _read_json(receipt_path, label="receipt")
     receipt_report = _read_json(report_path, label="receipt report")
-    receipt_ready = _validate_receipt_pair(
+    receipt_summary = _validate_receipt_pair(
         receipt, receipt_report, receipt_sha=receipt_sha, root=root
     )
-    return {
-        "receipt_ready": receipt_ready,
-        "launch_status": receipt["status"],
-    }, {
+    return receipt_summary, {
         "launch_manifest_path": launch_relative,
         "launch_manifest_sha256": launch_sha,
         "receipt_path": receipt_relative,
@@ -766,6 +868,10 @@ def _audit_inputs(*, gate_path: Path, gate_report_path: Path, root: Path) -> dic
     )
     launch, launch_refs = _validate_launch_manifest(launch_path, root=root)
     handoff, handoff_refs = _validate_handoff_pair(handoff_path, handoff_report_path, root=root)
+    if launch["receipt_symbol"] != handoff["symbol"]:
+        raise DailyResearchServiceLaunchGateAuditError(
+            "CHAIN_MISMATCH", "receipt and handoff symbols differ"
+        )
     audit, audit_relative = _validate_handoff_audit(
         handoff_audit_path,
         root=root,

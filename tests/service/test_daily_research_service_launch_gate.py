@@ -39,6 +39,8 @@ def _write_receipt_pair(root: Path, *, status: str = "ready") -> tuple[Path, Pat
     ready = status == "ready"
     receipt = {
         "admission_ready": ready,
+        "admission_report_sha256": "b" * 64,
+        "admission_sha256": "a" * 64,
         "audit_ready": True,
         "decision_ready": False,
         "first_as_of": "2026-08-10T00:00:00+00:00",
@@ -48,14 +50,19 @@ def _write_receipt_pair(root: Path, *, status: str = "ready") -> tuple[Path, Pat
         "package_count": 2,
         "receipt_ready": ready,
         "receipt_version": MARKET_AWARE_SESSION_HISTORY_FINAL_RECEIPT_VERSION,
+        "render_audit_report_sha256": "d" * 64,
         "render_ready": ready,
+        "render_report_sha256": "c" * 64,
         "status": status,
         "symbol": "600000.SH",
     }
     _write_self_hashed(receipt_path, receipt)
     report = {
-        **receipt,
+        "admission_ready": receipt["admission_ready"],
         "artifact_root": ".",
+        "audit_ready": receipt["audit_ready"],
+        "decision_ready": False,
+        "first_as_of": receipt["first_as_of"],
         "inputs": {
             "admission": {
                 "byte_count": 1,
@@ -78,7 +85,16 @@ def _write_receipt_pair(root: Path, *, status: str = "ready") -> tuple[Path, Pat
                 "sha256": "d" * 64,
             },
         },
+        "issues": receipt["issues"],
+        "last_as_of": receipt["last_as_of"],
+        "output_sha256": None,
+        "package_count": receipt["package_count"],
+        "receipt_ready": receipt["receipt_ready"],
         "receipt_sha256": sha256_bytes(receipt_path.read_bytes()),
+        "receipt_version": receipt["receipt_version"],
+        "render_ready": receipt["render_ready"],
+        "status": receipt["status"],
+        "symbol": receipt["symbol"],
     }
     _write_self_hashed(report_path, report)
     return receipt_path, report_path

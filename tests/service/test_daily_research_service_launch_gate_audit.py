@@ -29,6 +29,31 @@ def _audit(inputs: dict[str, Path], output_dir: Path) -> dict[str, object]:
     )
 
 
+def _rewrite_receipt_chain(inputs: dict[str, Path], mutate: object) -> None:
+    receipt_path = inputs["receipt"]
+    report_path = inputs["receipt_report"]
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    mutate(receipt, report)
+    _write_json(receipt_path, _sign_json(receipt))
+    report["receipt_sha256"] = sha256_bytes(receipt_path.read_bytes())
+    _write_json(report_path, _sign_json(report))
+
+    manifest = json.loads(inputs["launch_manifest"].read_text(encoding="utf-8"))
+    manifest["receipt_sha256"] = sha256_bytes(receipt_path.read_bytes())
+    manifest["receipt_report_sha256"] = sha256_bytes(report_path.read_bytes())
+    _write_json(inputs["launch_manifest"], manifest)
+
+    gate_path = (
+        inputs["handoff"].parent.parent / "service-gate/daily_research_service_launch_gate.json"
+    )
+    gate_report_path = gate_path.with_name("daily_research_service_launch_gate_report.json")
+    gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    gate["launch_manifest_sha256"] = sha256_bytes(inputs["launch_manifest"].read_bytes())
+    _write_json(gate_path, _sign_json(gate))
+    _write_json(gate_report_path, _sign_json(gate))
+
+
 @pytest.mark.parametrize(
     ("name", "as_of", "blocked", "expected_status"),
     [
@@ -173,6 +198,44 @@ def test_audit_rejects_symlink_escape_when_supported(tmp_path: Path) -> None:
     report = _audit(inputs, root / "gate-audit-symlink")
     assert report["audit_ready"] is False
     assert report["issues"][0]["code"] == "PATH_OUTSIDE_ARTIFACT_ROOT"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda receipt, report: receipt.update({"unexpected": True}),
+        lambda receipt, report: report.update({"unexpected": True}),
+        lambda receipt, report: receipt.pop("symbol"),
+        lambda receipt, report: report.pop("inputs"),
+        lambda receipt, report: (
+            receipt.update({"render_ready": False}),
+            report.update({"render_ready": False}),
+        ),
+        lambda receipt, report: (
+            receipt.update({"symbol": "000001.SZ"}),
+            report.update({"symbol": "000001.SZ"}),
+        ),
+    ],
+    ids=[
+        "receipt-unknown-field",
+        "report-unknown-field",
+        "receipt-missing-field",
+        "report-missing-field",
+        "readiness-contradiction",
+        "symbol-mismatch",
+    ],
+)
+def test_audit_rejects_rewritten_receipt_contracts(tmp_path: Path, mutation: object) -> None:
+    inputs = _prepare_gate(tmp_path / "receipt-contract")
+    root = inputs["handoff"].parent.parent
+    _build_gate(inputs, root / "service-gate")
+    _rewrite_receipt_chain(inputs, mutation)
+
+    report = _audit(inputs, root / "gate-audit")
+
+    assert report["audit_ready"] is False
+    assert report["status"] == "invalid"
+    assert report["gate_ready"] is False
 
 
 def test_audit_cli_returns_one_for_invalid_input_and_two_for_bad_root(
