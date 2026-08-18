@@ -136,6 +136,10 @@ from .service.daily_research_service_probe import (
     daily_research_service_probe_exit_code,
     probe_daily_research_service,
 )
+from .service.daily_research_service_run import (
+    DailyResearchServiceRunError,
+    run_daily_research_service,
+)
 from .service.launch_config import (
     ReadOnlyReceiptLaunchError,
     check_read_only_receipt_launch,
@@ -852,6 +856,23 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_service_probe.add_argument(
         "--timeout-seconds", type=float, default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS
     )
+
+    daily_service_run = subparsers.add_parser(
+        "run-daily-research-service",
+        help="run one bounded, audited daily research service session",
+    )
+    daily_service_run.add_argument("--daily-launch-gate", type=Path, required=True)
+    daily_service_run.add_argument("--daily-launch-gate-root", type=Path, required=True)
+    daily_service_run.add_argument("--daily-launch-gate-audit", type=Path, required=True)
+    daily_service_run.add_argument(
+        "--startup-timeout-seconds", type=float, default=10.0
+    )
+    daily_service_run.add_argument(
+        "--probe-timeout-seconds",
+        type=float,
+        default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
+    )
+    daily_service_run.add_argument("--output-dir", type=Path, required=True)
 
     renderer = subparsers.add_parser(
         "render-analysis", help="render a validated analysis report as Markdown"
@@ -2143,6 +2164,23 @@ def run_daily_research_service_probe(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def run_daily_research_service_command(args: argparse.Namespace) -> int:
+    try:
+        report, exit_code = run_daily_research_service(
+            gate_path=args.daily_launch_gate,
+            artifact_root=args.daily_launch_gate_root,
+            audit_path=args.daily_launch_gate_audit,
+            startup_timeout_seconds=args.startup_timeout_seconds,
+            probe_timeout_seconds=args.probe_timeout_seconds,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceRunError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -2362,6 +2400,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_read_only_receipt_probe(args)
     if args.command == "probe-daily-research-service":
         return run_daily_research_service_probe(args)
+    if args.command == "run-daily-research-service":
+        return run_daily_research_service_command(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":

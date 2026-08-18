@@ -27,6 +27,12 @@ from .daily_research_service_probe import (
     daily_research_service_probe_exit_code,
     probe_daily_research_service,
 )
+from .daily_research_service_run import (
+    DAILY_RESEARCH_SERVICE_RUN_REPORT_NAME,
+    DAILY_RESEARCH_SERVICE_RUN_VERSION,
+    DailyResearchServiceRunError,
+    run_daily_research_service,
+)
 from .launch_config import (
     READ_ONLY_RECEIPT_SERVICE_LAUNCH_VERSION,
     ReadOnlyReceiptLaunchConfig,
@@ -56,6 +62,10 @@ __all__ = [
     "DailyResearchServiceProbeError",
     "probe_daily_research_service",
     "daily_research_service_probe_exit_code",
+    "DAILY_RESEARCH_SERVICE_RUN_REPORT_NAME",
+    "DAILY_RESEARCH_SERVICE_RUN_VERSION",
+    "DailyResearchServiceRunError",
+    "run_daily_research_service",
     "DAILY_RESEARCH_SERVICE_LAUNCH_GATE_VERSION",
     "DailyResearchServiceLaunchGateConfig",
     "DailyResearchServiceLaunchGateError",

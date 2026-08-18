@@ -1310,3 +1310,29 @@ with `status=ready` does it reuse the existing receipt service. Stale, blocked,
 invalid, tampered, missing, or out-of-root inputs return `1` and do not listen;
 missing or illegal option combinations return `2`. Direct and Node55 launch
 modes remain unchanged.
+
+## Controlled daily research service run
+
+Node66 provides a manual, bounded operator run around the audited startup
+gate. It reuses Node65 validation and the existing Node60 four-route probe,
+then stops the child service and writes a self-hashed run report:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service \
+  --daily-launch-gate reports/daily-service-gate/daily_research_service_launch_gate.json \
+  --daily-launch-gate-root reports \
+  --daily-launch-gate-audit reports/daily-service-gate-audit/daily_research_service_launch_gate_audit_report.json \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-run
+```
+
+Exit `0` requires the audited service to start, all four Node60 routes to
+probe ready, and the child process to stop cleanly. Stale, blocked, invalid,
+tampered, missing, probe-failed, timed-out, or unexpectedly exited runs return
+`1`; invalid timeout/root/output configuration returns `2`. The report is
+`daily_research_service_run_report.json`, contains only relative artifact
+references and sanitized issues, preserves `decision_ready=false`, and never
+changes the gate or audit inputs. This is a manual one-shot run: it does not
+schedule, refresh, call AI or external APIs, add endpoints, or authorize
+trading.

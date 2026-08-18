@@ -79,3 +79,24 @@ The service and probe are local read-only tooling. Do not bind the service to a
 public interface, expose the endpoint through an unauthenticated proxy, or
 interpret `receipt_ready=true` as a trading authorization. All responses and
 probe results must keep `decision_ready=false`.
+
+## Controlled daily run
+
+For a manual one-shot operational check, wrap the audited Node65 startup with
+the Node60 four-route probe:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service \
+  --daily-launch-gate reports/daily-service-gate/daily_research_service_launch_gate.json \
+  --daily-launch-gate-root reports \
+  --daily-launch-gate-audit reports/daily-service-gate-audit/daily_research_service_launch_gate_audit_report.json \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-run
+```
+
+The command is bounded and manual. It starts the already-audited loopback
+service, probes health/readiness/receipt/daily-admission, stops the child, and
+writes a self-hashed `daily_research_service_run_report.json`. It does not
+schedule, refresh data, call AI, expose a public listener, or change
+`decision_ready=false`.
