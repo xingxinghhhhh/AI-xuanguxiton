@@ -36,6 +36,11 @@ python -m a_share_ai.cli serve-research-receipt \
   --artifact-root reports
 ```
 
+For actual listening, Phase 65 additionally requires the independent Node64
+audit report. The gate-only form remains a `--check-only` compatibility check;
+see `PHASE_65_AUDITED_DAILY_RESEARCH_SERVICE_STARTUP_MVP.md` for the startup
+command.
+
 The service reloads all referenced bytes before listening. A stale or blocked
 gate exits without binding; `--check-only` reports the gate without binding.
 When ready, the server reuses the existing receipt service and daily admission

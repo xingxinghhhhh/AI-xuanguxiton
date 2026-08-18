@@ -125,6 +125,11 @@ from .service.daily_research_service_launch_gate_audit import (
     DailyResearchServiceLaunchGateAuditError,
     audit_daily_research_service_launch_gate,
 )
+from .service.daily_research_service_launch_gate_startup import (
+    DailyResearchServiceLaunchGateStartupError,
+    daily_research_service_launch_gate_startup_check_report,
+    load_daily_research_service_launch_gate_startup,
+)
 from .service.daily_research_service_probe import (
     DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
     DailyResearchServiceProbeError,
@@ -822,6 +827,7 @@ def _build_parser() -> argparse.ArgumentParser:
     receipt_service.add_argument("--daily-admission-root", type=Path)
     receipt_service.add_argument("--daily-launch-gate", type=Path)
     receipt_service.add_argument("--daily-launch-gate-root", type=Path)
+    receipt_service.add_argument("--daily-launch-gate-audit", type=Path)
     receipt_service.add_argument(
         "--host",
         choices=("127.0.0.1", "::1"),
@@ -1880,12 +1886,15 @@ def run_market_aware_session_history_final_receipt(
 
 def run_read_only_receipt_server(args: argparse.Namespace) -> int:
     gate_values = (args.daily_launch_gate, args.daily_launch_gate_root)
-    if any(value is not None for value in gate_values):
+    if any(value is not None for value in (*gate_values, args.daily_launch_gate_audit)):
         if not all(value is not None for value in gate_values):
             print(
                 "CONFIG_INVALID: daily launch gate options must be provided as a complete set",
                 file=sys.stderr,
             )
+            return 2
+        if args.daily_launch_gate_audit is not None and not args.daily_launch_gate_root.is_dir():
+            print("CONFIG_INVALID: daily launch gate root is invalid", file=sys.stderr)
             return 2
         if any(
             value is not None
@@ -1905,6 +1914,55 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+        if args.daily_launch_gate_audit is None and not args.check_only:
+            print(
+                "CONFIG_INVALID: service startup requires --daily-launch-gate-audit",
+                file=sys.stderr,
+            )
+            return 2
+        if args.daily_launch_gate_audit is not None:
+            try:
+                startup = load_daily_research_service_launch_gate_startup(
+                    gate_path=args.daily_launch_gate,
+                    audit_path=args.daily_launch_gate_audit,
+                    artifact_root=args.daily_launch_gate_root,
+                )
+            except DailyResearchServiceLaunchGateStartupError as exc:
+                print(f"{exc.code}: {exc}", file=sys.stderr)
+                return 1
+            if args.check_only:
+                print(
+                    json.dumps(
+                        daily_research_service_launch_gate_startup_check_report(startup),
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+                return 0 if startup.launch_ready else 1
+            if not startup.launch_ready:
+                print(
+                    "STARTUP_NOT_READY: independent launch gate audit is not ready",
+                    file=sys.stderr,
+                )
+                return 1
+            config = startup.gate_config
+            try:
+                serve_read_only_receipt(
+                    receipt_path=config.receipt_path,
+                    receipt_report_path=config.receipt_report_path,
+                    artifact_root=config.artifact_root,
+                    host=config.host,
+                    port=config.port,
+                    daily_admission_path=config.daily_admission_path,
+                    daily_admission_report_path=config.daily_admission_report_path,
+                    daily_admission_root=config.artifact_root,
+                )
+            except ReadOnlyReceiptServiceError as exc:
+                print(f"{exc.code}: {exc}", file=sys.stderr)
+                return 2
+            except KeyboardInterrupt:
+                return 0
+            return 0
         try:
             config = check_daily_research_service_launch_gate(
                 gate_path=args.daily_launch_gate,

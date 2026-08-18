@@ -17,6 +17,9 @@ from a_share_ai.service.daily_research_service_launch_gate import (
     build_daily_research_service_launch_gate,
     check_daily_research_service_launch_gate,
 )
+from a_share_ai.service.daily_research_service_launch_gate_audit import (
+    audit_daily_research_service_launch_gate,
+)
 from a_share_ai.service.daily_research_service_probe import (
     daily_research_service_probe_exit_code,
     probe_daily_research_service,
@@ -135,6 +138,17 @@ def _build_gate(inputs: dict[str, Path], output_dir: Path) -> dict[str, Any]:
         artifact_root=inputs["handoff"].parent.parent,
         output_dir=output_dir,
     )
+
+
+def _build_gate_audit(root: Path, gate_dir: Path) -> Path:
+    audit_dir = root / "service-gate-audit"
+    audit_daily_research_service_launch_gate(
+        gate_path=gate_dir / "daily_research_service_launch_gate.json",
+        gate_report_path=gate_dir / "daily_research_service_launch_gate_report.json",
+        artifact_root=root,
+        output_dir=audit_dir,
+    )
+    return audit_dir / "daily_research_service_launch_gate_audit_report.json"
 
 
 def test_ready_gate_is_self_hashed_and_reloads_inputs(tmp_path: Path) -> None:
@@ -282,6 +296,7 @@ def test_ready_gate_starts_service_for_node60_probe(tmp_path: Path) -> None:
     root = inputs["handoff"].parent.parent
     gate_dir = root / "service-gate"
     _build_gate(inputs, gate_dir)
+    audit_path = _build_gate_audit(root, gate_dir)
     port = json.loads(inputs["launch_manifest"].read_text())["port"]
     process = subprocess.Popen(
         [
@@ -293,6 +308,8 @@ def test_ready_gate_starts_service_for_node60_probe(tmp_path: Path) -> None:
             str(gate_dir / "daily_research_service_launch_gate.json"),
             "--daily-launch-gate-root",
             str(root),
+            "--daily-launch-gate-audit",
+            str(audit_path),
             "--artifact-root",
             str(root),
         ],

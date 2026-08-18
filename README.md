@@ -1266,13 +1266,17 @@ To start through the gate, use only the new gate options:
 python -m a_share_ai.cli serve-research-receipt \
   --daily-launch-gate reports/daily-service-gate/daily_research_service_launch_gate.json \
   --daily-launch-gate-root reports \
+  --daily-launch-gate-audit reports/daily-service-gate-audit/daily_research_service_launch_gate_audit_report.json \
   --artifact-root reports
 ```
 
-`--check-only` validates the gate without listening. The old direct and
-Node55 `--launch-manifest` startup paths remain compatible, and Node60 keeps
-using the existing read-only four-route probe. The gate never refreshes data,
-calls external APIs, schedules work, or authorizes trading.
+Actual gate-mode startup now requires the Node64 independent audit report;
+`--check-only` with the audit validates both artifacts without listening. A
+gate-only `--check-only` remains available for Node63 compatibility, but it can
+never start the service. The old direct and Node55 `--launch-manifest` startup
+paths remain compatible, and Node60 keeps using the existing read-only
+four-route probe. The gate never refreshes data, calls external APIs, schedules
+work, or authorizes trading.
 
 ## Independent daily research service launch gate audit
 
@@ -1295,3 +1299,14 @@ It accepts valid ready, stale, and blocked gates for audit only; any tamper,
 missing input, artifact-root escape, version mismatch, or inconsistent state is
 fail-closed. The command never rebuilds the gate, starts the service, calls
 Node60, uses the network, or changes `decision_ready=false`.
+
+## Audited daily research service startup binding
+
+Node65 binds the Node64 report into the actual gate-mode startup path. Before a
+socket is opened, the service revalidates the gate pair and the audit report's
+self-hash, version, gate/report paths and SHAs, status, symbol, timestamps, and
+`decision_ready=false`. Only when both `gate_ready=true` and `audit_ready=true`
+with `status=ready` does it reuse the existing receipt service. Stale, blocked,
+invalid, tampered, missing, or out-of-root inputs return `1` and do not listen;
+missing or illegal option combinations return `2`. Direct and Node55 launch
+modes remain unchanged.
