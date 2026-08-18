@@ -1237,3 +1237,39 @@ boundaries return exit `1` in the report and configuration errors return exit
 `2`. `decision_ready` remains `false`; the command does not rebuild the
 handoff, start a service, access a network/API key, schedule work, or authorize
 trading.
+
+## Controlled daily research service launch gate
+
+Node63 binds the Node61 handoff and Node62 audit to the existing read-only
+service launch manifest without changing the older manifest contract:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-launch-gate \
+  --handoff reports/daily-handoff/daily_research_handoff.json \
+  --handoff-report reports/daily-handoff/daily_research_handoff_report.json \
+  --handoff-audit-report reports/daily-handoff-audit/daily_research_handoff_audit_report.json \
+  --launch-manifest reports/service/read_only_receipt_service_launch.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-gate
+```
+
+The versioned gate writes `daily_research_service_launch_gate.json` and its
+report. It rechecks the old launch manifest, handoff, audit, and daily
+admission hashes and metadata. Only a fully ready chain returns `0` and
+`gate_ready=true`; stale or blocked valid inputs return `1` and never bind a
+port. Invalid contracts also produce a fail-closed report and return `1`,
+while configuration errors return `2`.
+
+To start through the gate, use only the new gate options:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --daily-launch-gate reports/daily-service-gate/daily_research_service_launch_gate.json \
+  --daily-launch-gate-root reports \
+  --artifact-root reports
+```
+
+`--check-only` validates the gate without listening. The old direct and
+Node55 `--launch-manifest` startup paths remain compatible, and Node60 keeps
+using the existing read-only four-route probe. The gate never refreshes data,
+calls external APIs, schedules work, or authorizes trading.

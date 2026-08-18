@@ -115,6 +115,12 @@ from .runtime.daily_research_handoff_audit import (
 )
 from .runtime.daily_research_run import DailyResearchRunError, run_daily_research
 from .runtime.daily_research_run_audit import audit_daily_research_run
+from .service.daily_research_service_launch_gate import (
+    DailyResearchServiceLaunchGateError,
+    build_daily_research_service_launch_gate,
+    check_daily_research_service_launch_gate,
+    daily_research_service_launch_gate_check_report,
+)
 from .service.daily_research_service_probe import (
     DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
     DailyResearchServiceProbeError,
@@ -324,6 +330,17 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_handoff_audit.add_argument("--handoff-report", type=Path, required=True)
     daily_handoff_audit.add_argument("--artifact-root", type=Path, required=True)
     daily_handoff_audit.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_gate = subparsers.add_parser(
+        "build-daily-research-service-launch-gate",
+        help="build a controlled daily read-only service launch gate",
+    )
+    daily_service_gate.add_argument("--handoff", type=Path, required=True)
+    daily_service_gate.add_argument("--handoff-report", type=Path, required=True)
+    daily_service_gate.add_argument("--handoff-audit-report", type=Path, required=True)
+    daily_service_gate.add_argument("--launch-manifest", type=Path, required=True)
+    daily_service_gate.add_argument("--artifact-root", type=Path, required=True)
+    daily_service_gate.add_argument("--output-dir", type=Path, required=True)
 
     analysis = subparsers.add_parser(
         "analyze-input", help="build an evidence-backed research analysis report"
@@ -790,6 +807,8 @@ def _build_parser() -> argparse.ArgumentParser:
     receipt_service.add_argument("--daily-admission", type=Path)
     receipt_service.add_argument("--daily-admission-report", type=Path)
     receipt_service.add_argument("--daily-admission-root", type=Path)
+    receipt_service.add_argument("--daily-launch-gate", type=Path)
+    receipt_service.add_argument("--daily-launch-gate-root", type=Path)
     receipt_service.add_argument(
         "--host",
         choices=("127.0.0.1", "::1"),
@@ -1438,6 +1457,23 @@ def run_daily_research_handoff_audit_command(args: argparse.Namespace) -> int:
     return 0 if report.get("audit_ready") is True else 1
 
 
+def run_daily_research_service_launch_gate_command(args: argparse.Namespace) -> int:
+    try:
+        report = build_daily_research_service_launch_gate(
+            handoff_path=args.handoff,
+            handoff_report_path=args.handoff_report,
+            handoff_audit_report_path=args.handoff_audit_report,
+            launch_manifest_path=args.launch_manifest,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceLaunchGateError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("gate_ready") is True else 1
+
+
 def run_analysis_report(args: argparse.Namespace) -> int:
     if args.provider == "offline" and args.response_fixture is None:
         raise SystemExit("analyze-input --provider offline requires --response-fixture")
@@ -1815,6 +1851,68 @@ def run_market_aware_session_history_final_receipt(
 
 
 def run_read_only_receipt_server(args: argparse.Namespace) -> int:
+    gate_values = (args.daily_launch_gate, args.daily_launch_gate_root)
+    if any(value is not None for value in gate_values):
+        if not all(value is not None for value in gate_values):
+            print(
+                "CONFIG_INVALID: daily launch gate options must be provided as a complete set",
+                file=sys.stderr,
+            )
+            return 2
+        if any(
+            value is not None
+            for value in (
+                args.launch_manifest,
+                args.receipt,
+                args.receipt_report,
+                args.daily_admission,
+                args.daily_admission_report,
+                args.daily_admission_root,
+                args.host,
+                args.port,
+            )
+        ):
+            print(
+                "CONFIG_INVALID: daily launch gate cannot be combined with legacy launch options",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            config = check_daily_research_service_launch_gate(
+                gate_path=args.daily_launch_gate,
+                artifact_root=args.daily_launch_gate_root,
+            )
+            if args.check_only:
+                print(
+                    json.dumps(
+                        daily_research_service_launch_gate_check_report(config),
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+                return 0 if config.gate_ready else 1
+            if not config.gate_ready:
+                print("GATE_NOT_READY: daily launch gate is not ready", file=sys.stderr)
+                return 1
+            serve_read_only_receipt(
+                receipt_path=config.receipt_path,
+                receipt_report_path=config.receipt_report_path,
+                artifact_root=config.artifact_root,
+                host=config.host,
+                port=config.port,
+                daily_admission_path=config.daily_admission_path,
+                daily_admission_report_path=config.daily_admission_report_path,
+                daily_admission_root=config.artifact_root,
+            )
+        except DailyResearchServiceLaunchGateError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 2
+        except ReadOnlyReceiptServiceError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 2
+        except KeyboardInterrupt:
+            return 0
+        return 0
     daily_values = (
         args.daily_admission,
         args.daily_admission_report,
@@ -2114,6 +2212,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_handoff_command(args)
     if args.command == "audit-daily-research-handoff":
         return run_daily_research_handoff_audit_command(args)
+    if args.command == "build-daily-research-service-launch-gate":
+        return run_daily_research_service_launch_gate_command(args)
     if args.command == "analyze-input":
         return run_analysis_report(args)
     if args.command == "replay-market-aware-analysis":
