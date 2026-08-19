@@ -522,13 +522,10 @@ def audit_daily_research_service_release(
             "symbol",
             "as_of",
             "evaluation_at",
-            "run_status",
             "run_ready",
             "service_stopped",
         ):
-            if field in {"symbol", "as_of", "evaluation_at"} and (
-                manifest[field] != run[field] or manifest[field] != audit[field]
-            ):
+            if manifest[field] != run[field] or manifest[field] != audit[field]:
                 raise DailyResearchServiceReleaseAuditError(
                     "FIELD_MISMATCH", f"upstream field {field} differs"
                 )

@@ -191,6 +191,46 @@ def test_upstream_state_chain_is_recomputed_and_aligned(
     assert result["issues"][0]["code"] == expected_code
 
 
+@pytest.mark.parametrize(
+    ("release_kwargs", "field", "value"),
+    [
+        ({}, "run_ready", False),
+        ({"blocked": True}, "service_stopped", True),
+        ({"failed": True}, "run_ready", True),
+    ],
+)
+def test_release_readiness_summary_is_bound_to_node66(
+    tmp_path: Path,
+    release_kwargs: dict[str, bool],
+    field: str,
+    value: bool,
+) -> None:
+    root, manifest_path, report_path, _, _ = _prepare_release(
+        tmp_path / "release-summary", **release_kwargs
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    _sign(manifest)
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report[field] = value
+    report["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    _sign(report)
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    result = audit_daily_research_service_release(
+        manifest_path=manifest_path,
+        report_path=report_path,
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+    assert result["audit_ready"] is False
+    assert result["issues"][0]["code"] == "FIELD_MISMATCH"
+
+
 def test_missing_input_and_cli_configuration_are_reported(tmp_path: Path) -> None:
     root, manifest_path, report_path, _, _ = _prepare_release(tmp_path / "cli")
     missing = audit_daily_research_service_release(
