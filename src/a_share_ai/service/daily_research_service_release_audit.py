@@ -277,9 +277,35 @@ def _validate_upstream(
         raise DailyResearchServiceReleaseAuditError("TIME_MISMATCH", "upstream timestamps differ")
     if _time(run["as_of"], label="as_of") > _time(run["evaluation_at"], label="evaluation_at"):
         raise DailyResearchServiceReleaseAuditError("TIME_MISMATCH", "as_of is after evaluation_at")
-    for field in ("service_stopped", "run_ready"):
-        if not isinstance(run[field], bool) or not isinstance(audit[field], bool):
-            raise DailyResearchServiceReleaseAuditError("FIELD_MISMATCH", f"{field} is invalid")
+    for payload, label in ((run, "run"), (audit, "audit")):
+        if not isinstance(payload["startup_status"], str) or payload["startup_status"] not in {
+            "ready",
+            "blocked",
+            "invalid",
+        }:
+            raise DailyResearchServiceReleaseAuditError(
+                "FIELD_MISMATCH", f"{label} startup_status is invalid"
+            )
+        if payload["probe_status"] is not None and (
+            not isinstance(payload["probe_status"], str)
+            or payload["probe_status"] not in {"ready", "invalid"}
+        ):
+            raise DailyResearchServiceReleaseAuditError(
+                "FIELD_MISMATCH", f"{label} probe_status is invalid"
+            )
+        if payload["probe_exit_code"] is not None and (
+            isinstance(payload["probe_exit_code"], bool)
+            or not isinstance(payload["probe_exit_code"], int)
+            or payload["probe_exit_code"] < 0
+        ):
+            raise DailyResearchServiceReleaseAuditError(
+                "FIELD_MISMATCH", f"{label} probe_exit_code is invalid"
+            )
+        for field in ("service_stopped", "run_ready"):
+            if not isinstance(payload[field], bool):
+                raise DailyResearchServiceReleaseAuditError(
+                    "FIELD_MISMATCH", f"{label} {field} is invalid"
+                )
     if not isinstance(audit["run_status"], str) or audit["run_status"] not in {
         "ready",
         "failed",
@@ -289,6 +315,28 @@ def _validate_upstream(
         raise DailyResearchServiceReleaseAuditError("FIELD_MISMATCH", "audit run_status is invalid")
     if not isinstance(audit["audit_ready"], bool):
         raise DailyResearchServiceReleaseAuditError("FIELD_MISMATCH", "audit_ready is invalid")
+    expected_run_status = (
+        "blocked"
+        if run["startup_status"] == "blocked"
+        else "ready"
+        if run["run_ready"]
+        else "failed"
+    )
+    if audit["run_status"] != expected_run_status:
+        raise DailyResearchServiceReleaseAuditError(
+            "FIELD_MISMATCH", "upstream run_status differs"
+        )
+    for field in (
+        "startup_status",
+        "probe_status",
+        "probe_exit_code",
+        "run_ready",
+        "service_stopped",
+    ):
+        if audit[field] != run[field]:
+            raise DailyResearchServiceReleaseAuditError(
+                "FIELD_MISMATCH", f"upstream {field} differs"
+            )
     return _issues(run["issues"], label="run issues"), _issues(
         audit["issues"], label="audit issues"
     )
@@ -447,14 +495,6 @@ def audit_daily_research_service_release(
             or _sha(audit["audit_sha256"], label="audit audit_sha256") != chain_file["sha256"]
         ):
             raise DailyResearchServiceReleaseAuditError("HASH_MISMATCH", "gate SHA differs")
-        if not isinstance(run["startup_status"], str) or run["startup_status"] not in {
-            "ready",
-            "blocked",
-            "invalid",
-        }:
-            raise DailyResearchServiceReleaseAuditError(
-                "FIELD_MISMATCH", "startup status is invalid"
-            )
         common_fields = (
             "run_report_path",
             "run_report_sha256",
@@ -502,6 +542,9 @@ def audit_daily_research_service_release(
         expected_ready = (
             audit["audit_ready"] is True
             and expected_status == "ready"
+            and run["startup_status"] == "ready"
+            and run["probe_status"] == "ready"
+            and run["probe_exit_code"] == 0
             and run["run_ready"] is True
             and run["service_stopped"] is True
             and not run_issues

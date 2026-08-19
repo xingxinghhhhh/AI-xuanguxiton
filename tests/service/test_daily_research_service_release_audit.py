@@ -133,6 +133,64 @@ def test_tamper_and_false_ready_fail_closed(tmp_path: Path) -> None:
     assert result["issues"][0]["code"] == "UNKNOWN_FIELD"
 
 
+@pytest.mark.parametrize(
+    ("run_updates", "audit_updates", "expected_code"),
+    [
+        (
+            {"startup_status": "invalid", "probe_status": "invalid", "probe_exit_code": 1},
+            {"startup_status": "invalid", "probe_status": "invalid", "probe_exit_code": 1},
+            "STATE_MISMATCH",
+        ),
+        ({}, {"probe_status": "invalid", "probe_exit_code": 1}, "FIELD_MISMATCH"),
+    ],
+)
+def test_upstream_state_chain_is_recomputed_and_aligned(
+    tmp_path: Path,
+    run_updates: dict[str, object],
+    audit_updates: dict[str, object],
+    expected_code: str,
+) -> None:
+    root, manifest_path, report_path, run_path, audit_path = _prepare_release(
+        tmp_path / "upstream-state"
+    )
+    run = json.loads(run_path.read_text(encoding="utf-8"))
+    run.update(run_updates)
+    _sign(run)
+    run_path.write_text(
+        json.dumps(run, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    audit.update(audit_updates)
+    audit["run_report_sha256"] = sha256_bytes(run_path.read_bytes())
+    _sign(audit)
+    audit_path.write_text(
+        json.dumps(audit, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["run_report_sha256"] = sha256_bytes(run_path.read_bytes())
+    manifest["run_audit_report_sha256"] = sha256_bytes(audit_path.read_bytes())
+    _sign(manifest)
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    report["run_report_sha256"] = manifest["run_report_sha256"]
+    report["run_audit_report_sha256"] = manifest["run_audit_report_sha256"]
+    _sign(report)
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    result = audit_daily_research_service_release(
+        manifest_path=manifest_path,
+        report_path=report_path,
+        artifact_root=root,
+        output_dir=root / "audit",
+    )
+    assert result["audit_ready"] is False
+    assert result["issues"][0]["code"] == expected_code
+
+
 def test_missing_input_and_cli_configuration_are_reported(tmp_path: Path) -> None:
     root, manifest_path, report_path, _, _ = _prepare_release(tmp_path / "cli")
     missing = audit_daily_research_service_release(
