@@ -423,15 +423,19 @@ def test_exit_during_failed_kill_is_reported_as_uncontrolled_exit(tmp_path: Path
     class ExitDuringKillProcess:
         def __init__(self) -> None:
             self.poll_count = 0
+            self.terminate_attempted = False
+            self.kill_attempted = False
 
         def poll(self) -> int | None:
             self.poll_count += 1
-            return 0 if self.poll_count >= 3 else None
+            return 0 if self.poll_count >= 5 else None
 
         def terminate(self) -> None:
+            self.terminate_attempted = True
             raise OSError("terminate failed")
 
         def kill(self) -> None:
+            self.kill_attempted = True
             raise OSError("kill failed")
 
     process = ExitDuringKillProcess()
@@ -457,6 +461,8 @@ def test_exit_during_failed_kill_is_reported_as_uncontrolled_exit(tmp_path: Path
         )
 
     assert exit_code == 1
+    assert process.terminate_attempted is True
+    assert process.kill_attempted is True
     assert report["service_stopped"] is False
     assert report["run_ready"] is False
     assert report["issues"][0]["code"] == "SERVICE_EXITED"
