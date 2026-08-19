@@ -147,6 +147,28 @@ verified ready run returns `0`. Invalid configuration returns `2`. The output
 is `daily_research_service_release_run_audit_report.json` and always keeps
 `decision_ready=false`.
 
+## Read-only release-run admission
+
+Build the controlled admission summary only after Node71 and Node72 have both
+produced their reports:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-release-run-admission \
+  --run-report reports/daily-service-release-run/daily_research_service_release_run_report.json \
+  --run-audit-report reports/daily-service-release-run-audit/daily_research_service_release_run_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission
+```
+
+Node73 verifies the two input self-hashes, actual SHA-256 values, fixed
+filenames, artifact-root-relative paths, versions, and the shared run state.
+It does not re-run Node72 or read the older Node68–65 chain. A ready pair
+produces `admission_ready=true` and exit `0`; structurally valid blocked or
+failed inputs remain auditable but return `1`. Invalid artifacts also return
+`1`, configuration errors return `2`, and every output keeps
+`decision_ready=false`. The command has no service, HTTP, network, API-key,
+refresh, scheduler, or trading side effects.
+
 ## Independent release admission audit
 
 After building the Node68 release admission, audit it independently:

@@ -1298,6 +1298,27 @@ startup/probe/stop state. A valid blocked or failed run may be
 ready run returns `0`. Invalid configuration returns `2`, and
 `decision_ready=false` remains enforced.
 
+## Release-run read-only admission
+
+Node73 consumes only the Node71 run receipt and the Node72 independent audit
+report to produce a controlled, non-trading admission summary:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-release-run-admission \
+  --run-report reports/daily-service-release-run/daily_research_service_release_run_report.json \
+  --run-audit-report reports/daily-service-release-run-audit/daily_research_service_release_run_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission
+```
+
+It writes `daily_research_service_release_run_admission.json` and its
+`daily_research_service_release_run_admission_report.json`. Only a complete
+Node71/Node72 ready chain returns `0` with `admission_ready=true`; valid
+blocked or failed chains return `1` and remain fail-closed. Invalid, tampered,
+unknown-field, or out-of-root inputs also return `1`; configuration errors
+return `2`. The command reads no upstream artifacts beyond these two inputs,
+never starts or probes a service, and always keeps `decision_ready=false`.
+
 ## Independent daily research service run audit
 
 Node67 audits an existing Node66 run report without starting the loopback
