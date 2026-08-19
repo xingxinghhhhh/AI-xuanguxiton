@@ -319,6 +319,59 @@ def test_failed_stop_never_reports_ready(tmp_path: Path) -> None:
     assert process.killed is True
 
 
+def test_exit_between_finally_check_and_terminate_is_not_controlled(
+    tmp_path: Path,
+) -> None:
+    root, gate_dir, audit_path, _ = _root_and_gate(tmp_path)
+
+    class RaceProcess:
+        def __init__(self) -> None:
+            self.poll_calls = 0
+            self.terminate_attempted = False
+
+        def poll(self) -> int | None:
+            self.poll_calls += 1
+            return None if self.poll_calls <= 3 else 1
+
+        def terminate(self) -> None:
+            self.terminate_attempted = True
+            raise OSError("process exited before terminate")
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 1
+
+        def kill(self) -> None:
+            return None
+
+    process = RaceProcess()
+    with (
+        patch.object(run_module.subprocess, "Popen", return_value=process),
+        patch.object(
+            run_module,
+            "probe_daily_research_service",
+            return_value={
+                "status": "ready",
+                "daily_admission_ready": True,
+                "decision_ready": False,
+            },
+        ),
+    ):
+        report, exit_code = run_daily_research_service(
+            gate_path=gate_dir / "daily_research_service_launch_gate.json",
+            artifact_root=root,
+            audit_path=audit_path,
+            startup_timeout_seconds=1,
+            probe_timeout_seconds=0.1,
+            output_dir=root / "run-report",
+        )
+
+    assert exit_code == 1
+    assert process.terminate_attempted is True
+    assert report["service_stopped"] is True
+    assert report["run_ready"] is False
+    assert report["issues"][0]["code"] == "SERVICE_EXITED"
+
+
 @pytest.mark.parametrize(
     ("option", "value"),
     [("--startup-timeout-seconds", "0"), ("--probe-timeout-seconds", "nan")],

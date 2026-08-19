@@ -135,18 +135,25 @@ def _service_url(host: str, port: int) -> str:
     return f"http://{host}:{port}"
 
 
-def _stop_process(process: subprocess.Popen[bytes]) -> bool:
-    if process.poll() is None:
+def _stop_process(process: subprocess.Popen[bytes]) -> tuple[bool, bool]:
+    """Stop a process and report whether it exited before a stop was issued."""
+
+    if process.poll() is not None:
+        return True, True
+    terminate_issued = False
+    try:
+        process.terminate()
+        terminate_issued = True
+        process.wait(timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        if not terminate_issued and process.poll() is not None:
+            return True, True
         try:
-            process.terminate()
+            process.kill()
             process.wait(timeout=5)
         except (OSError, subprocess.TimeoutExpired):
-            try:
-                process.kill()
-                process.wait(timeout=5)
-            except (OSError, subprocess.TimeoutExpired):
-                return process.poll() is not None
-    return process.poll() is not None
+            return process.poll() is not None, not terminate_issued
+    return process.poll() is not None, False
 
 
 def _command(*, startup: DailyResearchServiceLaunchGateStartupConfig) -> list[str]:
@@ -291,8 +298,9 @@ def run_daily_research_service(
         report["issues"] = [_issue("SERVICE_START_FAILED", "service process could not start")]
     finally:
         if process is not None:
-            abnormal_exit_before_stop = abnormal_exit_before_stop or process.poll() is not None
-            report["service_stopped"] = _stop_process(process)
+            stopped, exited_before_stop = _stop_process(process)
+            abnormal_exit_before_stop = abnormal_exit_before_stop or exited_before_stop
+            report["service_stopped"] = stopped
 
     if abnormal_exit_before_stop:
         report["run_ready"] = False
