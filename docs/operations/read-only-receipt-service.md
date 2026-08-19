@@ -101,6 +101,24 @@ writes a self-hashed `daily_research_service_run_report.json`. It does not
 schedule, refresh data, call AI, expose a public listener, or change
 `decision_ready=false`.
 
+## Read-only service release admission
+
+Bind the completed run and independent audit before a human deployment or
+rollback review:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-release \
+  --run-report reports/daily-service-run/daily_research_service_run_report.json \
+  --run-audit-report reports/daily-service-run-audit/daily_research_service_run_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release
+```
+
+The manifest/report pair is deterministic and read-only. The command checks
+the upstream self-hashes, actual file hashes, normalized artifact-root paths,
+symbol/timestamp equality, and readiness state. It never deploys, starts, or
+probes the service, and always keeps `decision_ready=false`.
+
 ## Independent service-run audit
 
 After the bounded run, independently verify its report with:

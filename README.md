@@ -1257,6 +1257,26 @@ runs may be auditable, but only ready remains `run_ready=true`. Any invalid,
 tampered, missing, unknown-field, or out-of-root input fails closed, and
 `decision_ready` remains `false`.
 
+## Daily research service release admission
+
+Node68 binds a Node66 run report to its Node67 independent audit for human
+deployment or rollback review:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-release \
+  --run-report reports/daily-service-run/daily_research_service_run_report.json \
+  --run-audit-report reports/daily-service-run-audit/daily_research_service_run_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release
+```
+
+It writes a self-hashed manifest and report and sets `release_ready=true` only
+for a ready Node66 run with a ready Node67 audit, matching paths, hashes,
+symbol, and timestamps. Failed, blocked, tampered, unknown-field, and
+out-of-root inputs remain unpublishable. The command never deploys or starts a
+service, accesses HTTP/API keys, refreshes data, or changes
+`decision_ready=false`.
+
 ## Controlled daily research service launch gate
 
 Node63 binds the Node61 handoff and Node62 audit to the existing read-only
