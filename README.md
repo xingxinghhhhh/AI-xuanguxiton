@@ -1238,6 +1238,25 @@ boundaries return exit `1` in the report and configuration errors return exit
 handoff, start a service, access a network/API key, schedule work, or authorize
 trading.
 
+## Independent daily research service run audit
+
+Node67 audits an existing Node66 run report without starting the loopback
+service or calling HTTP:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-run \
+  --run-report reports/daily-service-run/daily_research_service_run_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-run-audit
+```
+
+The command rechecks the run report schema and self-hash, gate/audit paths and
+SHA-256 values, and the Node65 audited startup chain. It writes a deterministic
+`daily_research_service_run_audit_report.json`; ready, failed, and blocked
+runs may be auditable, but only ready remains `run_ready=true`. Any invalid,
+tampered, missing, unknown-field, or out-of-root input fails closed, and
+`decision_ready` remains `false`.
+
 ## Controlled daily research service launch gate
 
 Node63 binds the Node61 handoff and Node62 audit to the existing read-only

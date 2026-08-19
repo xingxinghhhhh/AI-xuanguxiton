@@ -100,3 +100,21 @@ service, probes health/readiness/receipt/daily-admission, stops the child, and
 writes a self-hashed `daily_research_service_run_report.json`. It does not
 schedule, refresh data, call AI, expose a public listener, or change
 `decision_ready=false`.
+
+## Independent service-run audit
+
+After the bounded run, independently verify its report with:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-run \
+  --run-report reports/daily-service-run/daily_research_service_run_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-run-audit
+```
+
+This is a read-only, offline audit. It checks the Node66 report self-hash,
+fixed fields, artifact-root boundaries, gate/audit hashes, and the Node65
+startup chain. It never starts the service, calls the probe, reads API keys,
+or changes the input reports. Its output is
+`daily_research_service_run_audit_report.json`, and it always keeps
+`decision_ready=false`.

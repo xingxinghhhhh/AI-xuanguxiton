@@ -140,6 +140,10 @@ from .service.daily_research_service_run import (
     DailyResearchServiceRunError,
     run_daily_research_service,
 )
+from .service.daily_research_service_run_audit import (
+    DailyResearchServiceRunAuditError,
+    audit_daily_research_service_run,
+)
 from .service.launch_config import (
     ReadOnlyReceiptLaunchError,
     check_read_only_receipt_launch,
@@ -873,6 +877,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
     )
     daily_service_run.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_run_audit = subparsers.add_parser(
+        "audit-daily-research-service-run",
+        help="independently audit one daily research service run",
+    )
+    daily_service_run_audit.add_argument("--run-report", type=Path, required=True)
+    daily_service_run_audit.add_argument("--artifact-root", type=Path, required=True)
+    daily_service_run_audit.add_argument("--output-dir", type=Path, required=True)
 
     renderer = subparsers.add_parser(
         "render-analysis", help="render a validated analysis report as Markdown"
@@ -2181,6 +2193,20 @@ def run_daily_research_service_command(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def run_daily_research_service_audit_command(args: argparse.Namespace) -> int:
+    try:
+        report = audit_daily_research_service_run(
+            run_report_path=args.run_report,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceRunAuditError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("audit_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -2402,6 +2428,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_probe(args)
     if args.command == "run-daily-research-service":
         return run_daily_research_service_command(args)
+    if args.command == "audit-daily-research-service-run":
+        return run_daily_research_service_audit_command(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":
