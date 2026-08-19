@@ -278,21 +278,16 @@ def _validate_admission(admission: Mapping[str, Any]) -> list[dict[str, str]]:
             raise DailyResearchServiceReleaseRunAdmissionAuditError(
                 "VERSION_MISMATCH", f"admission {field} is invalid"
             )
-    _optional_enum(
-        admission["startup_status"],
-        {"ready", "blocked", "failed"},
-        label="admission startup_status",
-    )
-    _optional_enum(
-        admission["probe_status"],
-        {"not_started", "ready", "failed", "timeout", "service_exited"},
-        label="admission probe_status",
-    )
-    _optional_enum(
-        admission["stop_status"],
-        {"not_attempted", "controlled", "uncontrolled_exit", "failed"},
-        label="admission stop_status",
-    )
+    status_enums = {
+        "startup_status": {"ready", "blocked", "failed"},
+        "probe_status": {"not_started", "ready", "failed", "timeout", "service_exited"},
+        "stop_status": {"not_attempted", "controlled", "uncontrolled_exit", "failed"},
+    }
+    for field, allowed in status_enums.items():
+        if invalid:
+            _optional_enum(admission[field], allowed, label=f"admission {field}")
+        else:
+            _enum(admission[field], allowed, label=f"admission {field}")
     if admission["probe_exit_code"] is not None and (
         isinstance(admission["probe_exit_code"], bool)
         or not isinstance(admission["probe_exit_code"], int)

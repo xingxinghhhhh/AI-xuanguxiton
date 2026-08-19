@@ -166,6 +166,22 @@ def test_invalid_pair_is_reported_fail_closed_without_upstream_reads(tmp_path: P
     popen.assert_not_called()
 
 
+@pytest.mark.parametrize("field", ["startup_status", "probe_status", "stop_status"])
+def test_non_invalid_status_requires_lifecycle_enums(tmp_path: Path, field: str) -> None:
+    root, admission, report = _make_pair(tmp_path / field)
+    admission_payload = json.loads(admission.read_text(encoding="utf-8"))
+    report_payload = json.loads(report.read_text(encoding="utf-8"))
+    admission_payload[field] = None
+    report_payload[field] = None
+    _write_hashed(admission, admission_payload)
+    report_payload["admission_sha256"] = sha256_bytes(admission.read_bytes())
+    _write_hashed(report, report_payload)
+    assert main(_args(root, admission, report, root / "audit")) == 1
+    audited, _ = _read_audit(root / "audit")
+    assert audited["audit_ready"] is False
+    assert audited["status"] == "invalid"
+
+
 @pytest.mark.parametrize("target", ["admission", "report"])
 def test_single_input_tamper_fails_closed(tmp_path: Path, target: str) -> None:
     root, admission, report = _make_pair(tmp_path / target)
