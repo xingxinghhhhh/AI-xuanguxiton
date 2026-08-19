@@ -101,6 +101,31 @@ writes a self-hashed `daily_research_service_run_report.json`. It does not
 schedule, refresh data, call AI, expose a public listener, or change
 `decision_ready=false`.
 
+## One-shot audited release run
+
+For a single manual release verification, use the Node70 release startup
+admission as the input to a bounded start/probe/stop operation:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --artifact-root reports \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-release-run
+```
+
+The command starts only a Node70-ready release, runs the Node60 four-route
+loopback probe, and then performs a controlled child-process stop. It writes
+`daily_research_service_release_run_report.json`. Exit `0` requires a ready
+probe and controlled stop; release validation, startup, probe, early-exit,
+port, or stop failures return `1`, while invalid configuration returns `2`.
+The receipt contains relative paths, hashes, statuses, and sanitized issues;
+it never records process logs or secrets and keeps `decision_ready=false`.
+This is a one-shot manual check, not a scheduler or daemon.
+
 ## Independent release admission audit
 
 After building the Node68 release admission, audit it independently:

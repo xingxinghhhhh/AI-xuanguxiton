@@ -1415,3 +1415,29 @@ references and sanitized issues, preserves `decision_ready=false`, and never
 changes the gate or audit inputs. This is a manual one-shot run: it does not
 schedule, refresh, call AI or external APIs, add endpoints, or authorize
 trading.
+
+## Audited release package one-shot run
+
+Node71 runs a Node70-ready daily research release exactly once, probes the four
+Node60 loopback routes, stops the child process under controlled lifecycle
+rules, and writes a self-hashed
+`daily_research_service_release_run_report.json`:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --artifact-root reports \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-release-run
+```
+
+Only a successful Node70 admission, Node60 probe exit code `0`, no early
+service exit, and a controlled stop produce `run_ready=true` and exit `0`.
+Release, path, port, startup, probe, or cleanup failures are fail-closed with
+exit `1`; invalid configuration returns `2`. The receipt has only relative
+paths and sanitized issues, always keeps `decision_ready=false`, and does not
+schedule work, refresh data, call AI, expose a public listener, or authorize
+trading.

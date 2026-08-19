@@ -144,6 +144,10 @@ from .service.daily_research_service_release_audit import (
     DailyResearchServiceReleaseAuditError,
     audit_daily_research_service_release,
 )
+from .service.daily_research_service_release_run import (
+    DailyResearchServiceReleaseRunError,
+    run_daily_research_service_release,
+)
 from .service.daily_research_service_release_startup import (
     DailyResearchServiceReleaseStartupError,
     daily_research_service_release_startup_check_report,
@@ -899,6 +903,22 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_service_run_audit.add_argument("--run-report", type=Path, required=True)
     daily_service_run_audit.add_argument("--artifact-root", type=Path, required=True)
     daily_service_run_audit.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_release_run = subparsers.add_parser(
+        "run-daily-research-service-release",
+        help="run one bounded, audited daily research service release",
+    )
+    daily_service_release_run.add_argument("--daily-release-manifest", type=Path, required=True)
+    daily_service_release_run.add_argument("--daily-release-report", type=Path, required=True)
+    daily_service_release_run.add_argument("--daily-release-audit-report", type=Path, required=True)
+    daily_service_release_run.add_argument("--artifact-root", type=Path, required=True)
+    daily_service_release_run.add_argument("--startup-timeout-seconds", type=float, default=10.0)
+    daily_service_release_run.add_argument(
+        "--probe-timeout-seconds",
+        type=float,
+        default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
+    )
+    daily_service_release_run.add_argument("--output-dir", type=Path, required=True)
 
     daily_service_release = subparsers.add_parser(
         "build-daily-research-service-release",
@@ -2297,6 +2317,24 @@ def run_daily_research_service_command(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def run_daily_research_service_release_run_command(args: argparse.Namespace) -> int:
+    try:
+        report, exit_code = run_daily_research_service_release(
+            manifest_path=args.daily_release_manifest,
+            report_path=args.daily_release_report,
+            audit_report_path=args.daily_release_audit_report,
+            artifact_root=args.artifact_root,
+            startup_timeout_seconds=args.startup_timeout_seconds,
+            probe_timeout_seconds=args.probe_timeout_seconds,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceReleaseRunError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def run_daily_research_service_audit_command(args: argparse.Namespace) -> int:
     try:
         report = audit_daily_research_service_run(
@@ -2562,6 +2600,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_probe(args)
     if args.command == "run-daily-research-service":
         return run_daily_research_service_command(args)
+    if args.command == "run-daily-research-service-release":
+        return run_daily_research_service_release_run_command(args)
     if args.command == "audit-daily-research-service-run":
         return run_daily_research_service_audit_command(args)
     if args.command == "build-daily-research-service-release":
