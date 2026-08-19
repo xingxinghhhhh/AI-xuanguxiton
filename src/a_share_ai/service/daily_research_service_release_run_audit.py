@@ -265,6 +265,18 @@ def _issues(value: Any, *, label: str) -> list[dict[str, str]]:
     return result
 
 
+def _enum(value: Any, allowed: set[str], *, label: str) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise DailyResearchServiceReleaseRunAuditError("FIELD_MISMATCH", f"{label} is invalid")
+    return value
+
+
+def _optional_enum(value: Any, allowed: set[str], *, label: str) -> str | None:
+    if value is None:
+        return None
+    return _enum(value, allowed, label=label)
+
+
 def _validate_common(
     payload: Mapping[str, Any], fields: set[str], *, label: str
 ) -> list[dict[str, str]]:
@@ -291,17 +303,12 @@ def _validate_common(
 
 
 def _validate_node66_types(payload: Mapping[str, Any]) -> None:
-    if payload["startup_status"] not in {"ready", "blocked", "invalid", "failed"}:
-        raise DailyResearchServiceReleaseRunAuditError(
-            "FIELD_MISMATCH", "Node66 startup_status is invalid"
-        )
-    if payload["probe_status"] is not None and payload["probe_status"] not in {
-        "ready",
-        "invalid",
-    }:
-        raise DailyResearchServiceReleaseRunAuditError(
-            "FIELD_MISMATCH", "Node66 probe_status is invalid"
-        )
+    _enum(
+        payload["startup_status"],
+        {"ready", "blocked", "invalid", "failed"},
+        label="Node66 startup_status",
+    )
+    _optional_enum(payload["probe_status"], {"ready", "invalid"}, label="Node66 probe_status")
     if payload["probe_exit_code"] is not None and (
         isinstance(payload["probe_exit_code"], bool)
         or not isinstance(payload["probe_exit_code"], int)
@@ -318,10 +325,11 @@ def _validate_node66_types(payload: Mapping[str, Any]) -> None:
 
 
 def _validate_node67_types(payload: Mapping[str, Any]) -> None:
-    if payload["run_status"] not in {"ready", "blocked", "failed", "invalid"}:
-        raise DailyResearchServiceReleaseRunAuditError(
-            "FIELD_MISMATCH", "Node67 run_status is invalid"
-        )
+    _enum(
+        payload["run_status"],
+        {"ready", "blocked", "failed", "invalid"},
+        label="Node67 run_status",
+    )
     _validate_node66_types(payload)
     if not isinstance(payload["audit_ready"], bool):
         raise DailyResearchServiceReleaseRunAuditError(
@@ -330,18 +338,13 @@ def _validate_node67_types(payload: Mapping[str, Any]) -> None:
 
 
 def _validate_release_types(payload: Mapping[str, Any], *, label: str) -> None:
-    if payload["run_status"] not in {"ready", "blocked", "failed", "invalid"}:
-        raise DailyResearchServiceReleaseRunAuditError(
-            "FIELD_MISMATCH", f"{label} run_status is invalid"
-        )
-    if payload["audit_status"] not in {"ready", "invalid"}:
-        raise DailyResearchServiceReleaseRunAuditError(
-            "FIELD_MISMATCH", f"{label} audit_status is invalid"
-        )
-    if payload["status"] not in {"ready", "blocked", "invalid"}:
-        raise DailyResearchServiceReleaseRunAuditError(
-            "FIELD_MISMATCH", f"{label} status is invalid"
-        )
+    _enum(
+        payload["run_status"],
+        {"ready", "blocked", "failed", "invalid"},
+        label=f"{label} run_status",
+    )
+    _enum(payload["audit_status"], {"ready", "invalid"}, label=f"{label} audit_status")
+    _enum(payload["status"], {"ready", "blocked", "invalid"}, label=f"{label} status")
     for field in ("run_ready", "service_stopped", "audit_ready", "release_ready"):
         if not isinstance(payload[field], bool):
             raise DailyResearchServiceReleaseRunAuditError(
@@ -372,10 +375,7 @@ def _validate_node71(run: Mapping[str, Any]) -> list[dict[str, str]]:
         raise DailyResearchServiceReleaseRunAuditError(
             "VERSION_MISMATCH", "startup version is invalid"
         )
-    if run["startup_status"] not in {"ready", "blocked", "failed"}:
-        raise DailyResearchServiceReleaseRunAuditError(
-            "FIELD_MISMATCH", "startup_status is invalid"
-        )
+    _enum(run["startup_status"], {"ready", "blocked", "failed"}, label="startup_status")
     if run["startup_status"] == "blocked" and run["symbol"] is None:
         if run["as_of"] is not None or run["evaluation_at"] is not None:
             raise DailyResearchServiceReleaseRunAuditError(
@@ -390,8 +390,11 @@ def _validate_node71(run: Mapping[str, Any]) -> list[dict[str, str]]:
         _time(run["evaluation_at"], label="Node71 evaluation_at")
     if not isinstance(run["startup_ready"], bool):
         raise DailyResearchServiceReleaseRunAuditError("FIELD_MISMATCH", "startup_ready is invalid")
-    if run["probe_status"] not in {"not_started", "ready", "failed", "timeout", "service_exited"}:
-        raise DailyResearchServiceReleaseRunAuditError("FIELD_MISMATCH", "probe_status is invalid")
+    _enum(
+        run["probe_status"],
+        {"not_started", "ready", "failed", "timeout", "service_exited"},
+        label="probe_status",
+    )
     if run["probe_exit_code"] is not None and (
         isinstance(run["probe_exit_code"], bool)
         or not isinstance(run["probe_exit_code"], int)
@@ -400,13 +403,15 @@ def _validate_node71(run: Mapping[str, Any]) -> list[dict[str, str]]:
         raise DailyResearchServiceReleaseRunAuditError(
             "FIELD_MISMATCH", "probe_exit_code is invalid"
         )
-    if run["stop_status"] not in {"not_attempted", "controlled", "uncontrolled_exit", "failed"}:
-        raise DailyResearchServiceReleaseRunAuditError("FIELD_MISMATCH", "stop_status is invalid")
+    _enum(
+        run["stop_status"],
+        {"not_attempted", "controlled", "uncontrolled_exit", "failed"},
+        label="stop_status",
+    )
     for field in ("service_stopped", "run_ready"):
         if not isinstance(run[field], bool):
             raise DailyResearchServiceReleaseRunAuditError("FIELD_MISMATCH", f"{field} is invalid")
-    if run["run_status"] not in {"ready", "blocked", "failed"}:
-        raise DailyResearchServiceReleaseRunAuditError("FIELD_MISMATCH", "run_status is invalid")
+    _enum(run["run_status"], {"ready", "blocked", "failed"}, label="run_status")
     for field in (
         "release_manifest_path",
         "release_report_path",
@@ -665,16 +670,32 @@ def _validate_release_chain(
         raise DailyResearchServiceReleaseRunAuditError(
             "STATE_MISMATCH", "release audit_ready is inconsistent"
         )
-    if (
-        manifest["run_status"] != node67["run_status"]
-        or manifest["run_ready"] != node66["run_ready"]
-        or manifest["service_stopped"] != node66["service_stopped"]
-        or manifest["issues"] != node66_issues
-        or manifest["audit_status"] != ("ready" if expected_audit_ready else "invalid")
-        or manifest["audit_ready"] != expected_audit_ready
-        or manifest["status"] != expected_release_status
-        or manifest["release_ready"] != expected_release_ready
-    ):
+    release_state_fields = (
+        "run_status",
+        "run_ready",
+        "service_stopped",
+        "audit_status",
+        "audit_ready",
+        "status",
+        "release_ready",
+        "issues",
+    )
+    for field in release_state_fields:
+        if report[field] != manifest[field] or release_audit[field] != manifest[field]:
+            raise DailyResearchServiceReleaseRunAuditError(
+                "STATE_MISMATCH", f"release {field} differs"
+            )
+    expected_release_state = {
+        "run_status": node67["run_status"],
+        "run_ready": node66["run_ready"],
+        "service_stopped": node66["service_stopped"],
+        "audit_status": "ready" if expected_audit_ready else "invalid",
+        "audit_ready": expected_audit_ready,
+        "status": expected_release_status,
+        "release_ready": expected_release_ready,
+        "issues": node66_issues,
+    }
+    if any(manifest[field] != value for field, value in expected_release_state.items()):
         raise DailyResearchServiceReleaseRunAuditError(
             "STATE_MISMATCH", "release and Node66/67 state differs"
         )

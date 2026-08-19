@@ -101,6 +101,31 @@ def _write_hashed(path: Path, payload: dict) -> None:
     )
 
 
+def _refresh_release_hashes(root: Path, run_report: Path, *, changed: str) -> None:
+    run = json.loads(run_report.read_text(encoding="utf-8"))
+    manifest_path = root / run["release_manifest_path"]
+    report_path = root / run["release_report_path"]
+    audit_path = root / run["release_audit_report_path"]
+    if changed == "manifest":
+        manifest_sha = sha256_bytes(manifest_path.read_bytes())
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["manifest_sha256"] = manifest_sha
+        _write_hashed(report_path, report)
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+        audit["manifest_sha256"] = manifest_sha
+        _write_hashed(audit_path, audit)
+    elif changed == "report":
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+        audit["report_sha256"] = sha256_bytes(report_path.read_bytes())
+        _write_hashed(audit_path, audit)
+    elif changed != "audit":
+        raise AssertionError(f"unsupported changed artifact: {changed}")
+    run["release_manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    run["release_report_sha256"] = sha256_bytes(report_path.read_bytes())
+    run["release_audit_report_sha256"] = sha256_bytes(audit_path.read_bytes())
+    _write_hashed(run_report, run)
+
+
 def test_ready_run_is_independently_audited_without_process_or_http(
     tmp_path: Path,
 ) -> None:
@@ -227,6 +252,36 @@ def test_invalid_upstream_boolean_type_is_rejected(tmp_path: Path) -> None:
     run["release_report_sha256"] = sha256_bytes(report_path.read_bytes())
     run["release_audit_report_sha256"] = sha256_bytes(audit_path.read_bytes())
     _write_hashed(run_report, run)
+    assert main(_audit_args(root, run_report, root / "run-audit")) == 1
+    audited, _ = _read_audit(root / "run-audit")
+    assert audited["audit_ready"] is False
+    assert audited["issues"][0]["code"] == "FIELD_MISMATCH"
+
+
+@pytest.mark.parametrize("changed", ["report", "audit"])
+def test_only_release_report_or_audit_rewrite_is_rejected(tmp_path: Path, changed: str) -> None:
+    root, run_report = _make_run(tmp_path / changed)
+    run = json.loads(run_report.read_text(encoding="utf-8"))
+    path = root / run["release_report_path" if changed == "report" else "release_audit_report_path"]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["status"] = "blocked"
+    _write_hashed(path, payload)
+    _refresh_release_hashes(root, run_report, changed=changed)
+    assert main(_audit_args(root, run_report, root / "run-audit")) == 1
+    audited, _ = _read_audit(root / "run-audit")
+    assert audited["audit_ready"] is False
+    assert audited["issues"][0]["code"] == "STATE_MISMATCH"
+
+
+@pytest.mark.parametrize("invalid_value", [[], {}, None, 1, "not-a-status"])
+def test_invalid_release_enum_types_fail_closed(tmp_path: Path, invalid_value: object) -> None:
+    root, run_report = _make_run(tmp_path / "invalid-enum")
+    run = json.loads(run_report.read_text(encoding="utf-8"))
+    manifest_path = root / run["release_manifest_path"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["status"] = invalid_value
+    _write_hashed(manifest_path, manifest)
+    _refresh_release_hashes(root, run_report, changed="manifest")
     assert main(_audit_args(root, run_report, root / "run-audit")) == 1
     audited, _ = _read_audit(root / "run-audit")
     assert audited["audit_ready"] is False
