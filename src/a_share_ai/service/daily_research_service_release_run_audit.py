@@ -305,7 +305,7 @@ def _validate_common(
 def _validate_node66_types(payload: Mapping[str, Any]) -> None:
     _enum(
         payload["startup_status"],
-        {"ready", "blocked", "invalid", "failed"},
+        {"ready", "blocked", "invalid"},
         label="Node66 startup_status",
     )
     _optional_enum(payload["probe_status"], {"ready", "invalid"}, label="Node66 probe_status")

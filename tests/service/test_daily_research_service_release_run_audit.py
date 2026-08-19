@@ -288,6 +288,38 @@ def test_invalid_release_enum_types_fail_closed(tmp_path: Path, invalid_value: o
     assert audited["issues"][0]["code"] == "FIELD_MISMATCH"
 
 
+def test_node66_failed_startup_status_is_rejected(tmp_path: Path) -> None:
+    root, run_report = _make_run(tmp_path / "invalid-node66-startup")
+    run = json.loads(run_report.read_text(encoding="utf-8"))
+    manifest_path = root / run["release_manifest_path"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    node66_path = root / manifest["run_report_path"]
+    node66 = json.loads(node66_path.read_text(encoding="utf-8"))
+    node66["startup_status"] = "failed"
+    _write_hashed(node66_path, node66)
+    report_path = root / run["release_report_path"]
+    audit_path = root / run["release_audit_report_path"]
+    release_report = json.loads(report_path.read_text(encoding="utf-8"))
+    release_audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    node66_sha = sha256_bytes(node66_path.read_bytes())
+    for payload in (manifest, release_report, release_audit):
+        payload["run_report_sha256"] = node66_sha
+    _write_hashed(manifest_path, manifest)
+    release_report["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    _write_hashed(report_path, release_report)
+    release_audit["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    release_audit["report_sha256"] = sha256_bytes(report_path.read_bytes())
+    _write_hashed(audit_path, release_audit)
+    run["release_manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    run["release_report_sha256"] = sha256_bytes(report_path.read_bytes())
+    run["release_audit_report_sha256"] = sha256_bytes(audit_path.read_bytes())
+    _write_hashed(run_report, run)
+    assert main(_audit_args(root, run_report, root / "run-audit")) == 1
+    audited, _ = _read_audit(root / "run-audit")
+    assert audited["audit_ready"] is False
+    assert audited["issues"][0]["code"] == "FIELD_MISMATCH"
+
+
 def test_external_run_report_is_rejected_without_reading_it(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()
