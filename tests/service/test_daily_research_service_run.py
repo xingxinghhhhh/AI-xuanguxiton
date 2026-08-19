@@ -221,6 +221,7 @@ def test_probe_success_after_child_exit_never_becomes_ready(tmp_path: Path) -> N
     assert exit_code == 1
     assert report["probe_status"] == "ready"
     assert report["probe_exit_code"] == 0
+    assert report["service_stopped"] is False
     assert report["run_ready"] is False
     assert report["issues"][0]["code"] == "SERVICE_EXITED"
 
@@ -367,7 +368,7 @@ def test_exit_between_finally_check_and_terminate_is_not_controlled(
 
     assert exit_code == 1
     assert process.terminate_attempted is True
-    assert report["service_stopped"] is True
+    assert report["service_stopped"] is False
     assert report["run_ready"] is False
     assert report["issues"][0]["code"] == "SERVICE_EXITED"
 

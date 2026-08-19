@@ -139,20 +139,21 @@ def _stop_process(process: subprocess.Popen[bytes]) -> tuple[bool, bool]:
     """Stop a process and report whether it exited before a stop was issued."""
 
     if process.poll() is not None:
-        return True, True
-    terminate_issued = False
+        return False, True
+    stop_signal_issued = False
     try:
         process.terminate()
-        terminate_issued = True
+        stop_signal_issued = True
         process.wait(timeout=5)
     except (OSError, subprocess.TimeoutExpired):
-        if not terminate_issued and process.poll() is not None:
-            return True, True
+        if not stop_signal_issued and process.poll() is not None:
+            return False, True
         try:
             process.kill()
+            stop_signal_issued = True
             process.wait(timeout=5)
         except (OSError, subprocess.TimeoutExpired):
-            return process.poll() is not None, not terminate_issued
+            return process.poll() is not None, False
     return process.poll() is not None, False
 
 
