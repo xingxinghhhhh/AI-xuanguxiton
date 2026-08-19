@@ -140,6 +140,10 @@ from .service.daily_research_service_release import (
     DailyResearchServiceReleaseError,
     build_daily_research_service_release,
 )
+from .service.daily_research_service_release_audit import (
+    DailyResearchServiceReleaseAuditError,
+    audit_daily_research_service_release,
+)
 from .service.daily_research_service_run import (
     DailyResearchServiceRunError,
     run_daily_research_service,
@@ -898,6 +902,15 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_service_release.add_argument("--run-audit-report", type=Path, required=True)
     daily_service_release.add_argument("--artifact-root", type=Path, required=True)
     daily_service_release.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_release_audit = subparsers.add_parser(
+        "audit-daily-research-service-release",
+        help="independently audit a daily research service release admission",
+    )
+    daily_service_release_audit.add_argument("--manifest", type=Path, required=True)
+    daily_service_release_audit.add_argument("--report", type=Path, required=True)
+    daily_service_release_audit.add_argument("--artifact-root", type=Path, required=True)
+    daily_service_release_audit.add_argument("--output-dir", type=Path, required=True)
 
     renderer = subparsers.add_parser(
         "render-analysis", help="render a validated analysis report as Markdown"
@@ -2235,6 +2248,21 @@ def run_daily_research_service_release_command(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def run_daily_research_service_release_audit_command(args: argparse.Namespace) -> int:
+    try:
+        report = audit_daily_research_service_release(
+            manifest_path=args.manifest,
+            report_path=args.report,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceReleaseAuditError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("audit_ready") is True else 1
+
+
 def run_render_analysis(args: argparse.Namespace) -> int:
     report = render_analysis(
         analysis_path=args.analysis,
@@ -2460,6 +2488,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_audit_command(args)
     if args.command == "build-daily-research-service-release":
         return run_daily_research_service_release_command(args)
+    if args.command == "audit-daily-research-service-release":
+        return run_daily_research_service_release_audit_command(args)
     if args.command == "render-analysis":
         return run_render_analysis(args)
     if args.command == "audit-analysis-quality":
