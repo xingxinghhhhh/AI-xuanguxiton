@@ -90,6 +90,17 @@ def _assert_self_hash(report: dict) -> None:
     assert report["output_sha256"] == expected
 
 
+def _write_hashed(path: Path, payload: dict) -> None:
+    payload["output_sha256"] = None
+    payload["output_sha256"] = sha256_bytes(
+        (json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+    )
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_ready_run_is_independently_audited_without_process_or_http(
     tmp_path: Path,
 ) -> None:
@@ -165,6 +176,61 @@ def test_upstream_tamper_fails_closed(tmp_path: Path) -> None:
     report, _ = _read_audit(root / "run-audit")
     assert report["audit_ready"] is False
     assert report["issues"][0]["code"] in {"HASH_MISMATCH", "SELF_HASH_MISMATCH"}
+
+
+def test_synchronously_rewritten_release_state_is_still_rejected(tmp_path: Path) -> None:
+    root, run_report = _make_run(tmp_path / "sync-rewrite")
+    run = json.loads(run_report.read_text(encoding="utf-8"))
+    manifest_path = root / run["release_manifest_path"]
+    report_path = root / run["release_report_path"]
+    audit_path = root / run["release_audit_report_path"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    release_report = json.loads(report_path.read_text(encoding="utf-8"))
+    release_audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    for payload in (manifest, release_report, release_audit):
+        payload["run_status"] = "blocked"
+        payload["release_ready"] = False
+        payload["status"] = "blocked"
+    _write_hashed(manifest_path, manifest)
+    release_report["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    _write_hashed(report_path, release_report)
+    release_audit["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    release_audit["report_sha256"] = sha256_bytes(report_path.read_bytes())
+    _write_hashed(audit_path, release_audit)
+    run["release_manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    run["release_report_sha256"] = sha256_bytes(report_path.read_bytes())
+    run["release_audit_report_sha256"] = sha256_bytes(audit_path.read_bytes())
+    _write_hashed(run_report, run)
+    assert main(_audit_args(root, run_report, root / "run-audit")) == 1
+    audited, _ = _read_audit(root / "run-audit")
+    assert audited["audit_ready"] is False
+    assert audited["issues"][0]["code"] == "STATE_MISMATCH"
+
+
+def test_invalid_upstream_boolean_type_is_rejected(tmp_path: Path) -> None:
+    root, run_report = _make_run(tmp_path / "invalid-type")
+    run = json.loads(run_report.read_text(encoding="utf-8"))
+    manifest_path = root / run["release_manifest_path"]
+    report_path = root / run["release_report_path"]
+    audit_path = root / run["release_audit_report_path"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    release_report = json.loads(report_path.read_text(encoding="utf-8"))
+    release_audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    manifest["release_ready"] = "true"
+    _write_hashed(manifest_path, manifest)
+    release_report["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    _write_hashed(report_path, release_report)
+    release_audit["manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    release_audit["report_sha256"] = sha256_bytes(report_path.read_bytes())
+    _write_hashed(audit_path, release_audit)
+    run["release_manifest_sha256"] = sha256_bytes(manifest_path.read_bytes())
+    run["release_report_sha256"] = sha256_bytes(report_path.read_bytes())
+    run["release_audit_report_sha256"] = sha256_bytes(audit_path.read_bytes())
+    _write_hashed(run_report, run)
+    assert main(_audit_args(root, run_report, root / "run-audit")) == 1
+    audited, _ = _read_audit(root / "run-audit")
+    assert audited["audit_ready"] is False
+    assert audited["issues"][0]["code"] == "FIELD_MISMATCH"
 
 
 def test_external_run_report_is_rejected_without_reading_it(tmp_path: Path) -> None:

@@ -290,6 +290,65 @@ def _validate_common(
     return _issues(payload.get("issues"), label=f"{label} issues")
 
 
+def _validate_node66_types(payload: Mapping[str, Any]) -> None:
+    if payload["startup_status"] not in {"ready", "blocked", "invalid", "failed"}:
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", "Node66 startup_status is invalid"
+        )
+    if payload["probe_status"] is not None and payload["probe_status"] not in {
+        "ready",
+        "invalid",
+    }:
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", "Node66 probe_status is invalid"
+        )
+    if payload["probe_exit_code"] is not None and (
+        isinstance(payload["probe_exit_code"], bool)
+        or not isinstance(payload["probe_exit_code"], int)
+        or payload["probe_exit_code"] < 0
+    ):
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", "Node66 probe_exit_code is invalid"
+        )
+    for field in ("service_stopped", "run_ready"):
+        if not isinstance(payload[field], bool):
+            raise DailyResearchServiceReleaseRunAuditError(
+                "FIELD_MISMATCH", f"Node66 {field} is invalid"
+            )
+
+
+def _validate_node67_types(payload: Mapping[str, Any]) -> None:
+    if payload["run_status"] not in {"ready", "blocked", "failed", "invalid"}:
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", "Node67 run_status is invalid"
+        )
+    _validate_node66_types(payload)
+    if not isinstance(payload["audit_ready"], bool):
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", "Node67 audit_ready is invalid"
+        )
+
+
+def _validate_release_types(payload: Mapping[str, Any], *, label: str) -> None:
+    if payload["run_status"] not in {"ready", "blocked", "failed", "invalid"}:
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", f"{label} run_status is invalid"
+        )
+    if payload["audit_status"] not in {"ready", "invalid"}:
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", f"{label} audit_status is invalid"
+        )
+    if payload["status"] not in {"ready", "blocked", "invalid"}:
+        raise DailyResearchServiceReleaseRunAuditError(
+            "FIELD_MISMATCH", f"{label} status is invalid"
+        )
+    for field in ("run_ready", "service_stopped", "audit_ready", "release_ready"):
+        if not isinstance(payload[field], bool):
+            raise DailyResearchServiceReleaseRunAuditError(
+                "FIELD_MISMATCH", f"{label} {field} is invalid"
+            )
+
+
 def _validate_node71(run: Mapping[str, Any]) -> list[dict[str, str]]:
     if set(run) != _RUN_FIELDS:
         raise DailyResearchServiceReleaseRunAuditError(
@@ -428,6 +487,7 @@ def _validate_release_chain(
         ),
     ):
         _validate_common(payload, fields, label=label)
+        _validate_release_types(payload, label=label)
         if payload["release_version"] != DAILY_RESEARCH_SERVICE_RELEASE_VERSION:
             raise DailyResearchServiceReleaseRunAuditError(
                 "VERSION_MISMATCH", f"{label} version is invalid"
@@ -494,7 +554,9 @@ def _validate_release_chain(
     node66 = _read_json(node66_file["raw"], label="Node66 run report")
     node67 = _read_json(node67_file["raw"], label="Node67 audit report")
     node66_issues = _validate_common(node66, _NODE66_FIELDS, label="Node66 run report")
+    _validate_node66_types(node66)
     _validate_common(node67, _NODE67_FIELDS, label="Node67 audit report")
+    _validate_node67_types(node67)
     if (
         node66["run_version"] != DAILY_RESEARCH_SERVICE_RUN_VERSION
         or node67["audit_version"] != DAILY_RESEARCH_SERVICE_RUN_AUDIT_VERSION
@@ -602,6 +664,19 @@ def _validate_release_chain(
     ):
         raise DailyResearchServiceReleaseRunAuditError(
             "STATE_MISMATCH", "release audit_ready is inconsistent"
+        )
+    if (
+        manifest["run_status"] != node67["run_status"]
+        or manifest["run_ready"] != node66["run_ready"]
+        or manifest["service_stopped"] != node66["service_stopped"]
+        or manifest["issues"] != node66_issues
+        or manifest["audit_status"] != ("ready" if expected_audit_ready else "invalid")
+        or manifest["audit_ready"] != expected_audit_ready
+        or manifest["status"] != expected_release_status
+        or manifest["release_ready"] != expected_release_ready
+    ):
+        raise DailyResearchServiceReleaseRunAuditError(
+            "STATE_MISMATCH", "release and Node66/67 state differs"
         )
     return (
         manifest_file,
