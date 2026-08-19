@@ -245,3 +245,31 @@ startup chain. It never starts the service, calls the probe, reads API keys,
 or changes the input reports. Its output is
 `daily_research_service_run_audit_report.json`, and it always keeps
 `decision_ready=false`.
+
+## Independent release-run admission pair audit
+
+After Node73 creates the release-run admission pair, audit that pair without
+starting anything:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission \
+  --admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-audit
+```
+
+The Node74 audit reads only the two Node73 files. It verifies their schemas,
+self-hashes, actual hashes, root-relative paths, report bindings, versions,
+and shared internal readiness state. It does not reread Node71/72, rerun
+Node73, start a service, send HTTP, use the network, read credentials, or
+change inputs. Ready returns `0`; structurally consistent blocked or failed
+pairs, invalid/tampered pairs, and missing evidence return `1`; bad command
+configuration returns `2`. The output is
+`daily_research_service_release_run_admission_audit_report.json` and preserves
+`decision_ready=false`.
+
+This audit establishes internal consistency of the supplied Node73 pair. It
+cannot detect a coordinated rewrite of both files without an external trusted
+reference, and it does not replace the independent Node71 run receipt or
+Node72 audit.

@@ -1319,6 +1319,29 @@ unknown-field, or out-of-root inputs also return `1`; configuration errors
 return `2`. The command reads no upstream artifacts beyond these two inputs,
 never starts or probes a service, and always keeps `decision_ready=false`.
 
+## Independent release-run admission pair audit
+
+After Node73 creates its admission pair, independently check both files:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission \
+  --admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-audit
+```
+
+Node74 checks the two fixed schemas, self-hashes, actual SHA-256 values,
+root-relative paths, report-to-admission bindings, versions, and internal
+state derivation without reading Node71/72 or rerunning Node73. A consistent
+ready pair returns `0`; blocked or failed pairs remain auditable but return
+`1`; tampered or invalid pairs return `1`, and configuration errors return
+`2`. The output is
+`daily_research_service_release_run_admission_audit_report.json` and keeps
+`decision_ready=false`. This proves consistency of the supplied Node73 pair,
+not resistance to coordinated rewriting of both files, and does not replace
+the independent Node71 receipt or Node72 audit.
+
 ## Independent daily research service run audit
 
 Node67 audits an existing Node66 run report without starting the loopback

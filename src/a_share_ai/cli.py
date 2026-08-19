@@ -152,6 +152,10 @@ from .service.daily_research_service_release_run_admission import (
     DailyResearchServiceReleaseRunAdmissionError,
     build_daily_research_service_release_run_admission,
 )
+from .service.daily_research_service_release_run_admission_audit import (
+    DailyResearchServiceReleaseRunAdmissionAuditError,
+    audit_daily_research_service_release_run_admission,
+)
 from .service.daily_research_service_release_run_audit import (
     DailyResearchServiceReleaseRunAuditError,
     audit_daily_research_service_release_run,
@@ -944,6 +948,17 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_service_release_run_admission.add_argument("--run-audit-report", type=Path, required=True)
     daily_service_release_run_admission.add_argument("--artifact-root", type=Path, required=True)
     daily_service_release_run_admission.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_release_run_admission_audit = subparsers.add_parser(
+        "audit-daily-research-service-release-run-admission",
+        help="audit a release-run admission pair without consulting upstream artifacts",
+    )
+    daily_service_release_run_admission_audit.add_argument("--admission", type=Path, required=True)
+    daily_service_release_run_admission_audit.add_argument("--report", type=Path, required=True)
+    daily_service_release_run_admission_audit.add_argument(
+        "--artifact-root", type=Path, required=True
+    )
+    daily_service_release_run_admission_audit.add_argument("--output-dir", type=Path, required=True)
 
     daily_service_release = subparsers.add_parser(
         "build-daily-research-service-release",
@@ -2391,6 +2406,23 @@ def run_daily_research_service_release_run_admission_command(args: argparse.Name
     return exit_code
 
 
+def run_daily_research_service_release_run_admission_audit_command(
+    args: argparse.Namespace,
+) -> int:
+    try:
+        report = audit_daily_research_service_release_run_admission(
+            admission_path=args.admission,
+            report_path=args.report,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceReleaseRunAdmissionAuditError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("audit_ready") is True and report.get("status") == "ready" else 1
+
+
 def run_daily_research_service_audit_command(args: argparse.Namespace) -> int:
     try:
         report = audit_daily_research_service_run(
@@ -2662,6 +2694,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_release_run_audit_command(args)
     if args.command == "build-daily-research-service-release-run-admission":
         return run_daily_research_service_release_run_admission_command(args)
+    if args.command == "audit-daily-research-service-release-run-admission":
+        return run_daily_research_service_release_run_admission_audit_command(args)
     if args.command == "audit-daily-research-service-run":
         return run_daily_research_service_audit_command(args)
     if args.command == "build-daily-research-service-release":
