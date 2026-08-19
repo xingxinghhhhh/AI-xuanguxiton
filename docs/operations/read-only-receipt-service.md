@@ -118,6 +118,30 @@ manifest binding, actual Node66/67 hashes, paths, timestamps and readiness;
 it never rebuilds or starts the service and always preserves
 `decision_ready=false`.
 
+## Audited release startup admission
+
+After Node68 and Node69 both report a ready release, validate and start the
+existing Node65 loopback service as one guarded operation:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --artifact-root reports \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --check-only
+```
+
+Remove `--check-only` only for the actual loopback startup. The three release
+arguments are a required group and cannot be mixed with direct launch,
+launch-manifest, daily-admission, daily-launch-gate, host, or port options.
+Node70 validates the Node68/69 hashes and status chain, then delegates the
+Node65 gate check. It does not rebuild or audit artifacts. Non-ready,
+tampered, missing, or out-of-root artifacts return before socket binding;
+check-only never binds. The Node65 host/port and receipt inputs remain the
+source of runtime configuration, and the service stays loopback-only and
+`decision_ready=false`.
+
 ## Read-only service release admission
 
 Bind the completed run and independent audit before a human deployment or

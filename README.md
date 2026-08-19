@@ -363,6 +363,28 @@ It rechecks both Node68 files and the referenced Node66/67 chain, recomputes
 may be audited but are never promoted; the command is read-only and keeps
 `decision_ready=false`.
 
+## Audited daily research release startup
+
+Node70 binds a ready Node68 release and Node69 release audit to the existing
+Node65 loopback startup chain:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --artifact-root reports \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --check-only
+```
+
+The three release arguments must be supplied together. The loader validates the
+Node68/69 chain, Node66/67 references and the existing Node65 gate before any
+socket is opened. A ready chain can then start the existing read-only loopback
+service using the host, port and receipt inputs from Node65; blocked, failed,
+tampered or out-of-root artifacts return without binding. Legacy direct,
+launch-manifest and daily-launch-gate paths remain compatible when the Node70
+release group is omitted. `decision_ready` remains `false`.
+
 ## Research freshness audit
 
 Check whether a published research package corresponds to the latest completed

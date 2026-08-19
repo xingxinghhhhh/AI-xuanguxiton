@@ -144,6 +144,11 @@ from .service.daily_research_service_release_audit import (
     DailyResearchServiceReleaseAuditError,
     audit_daily_research_service_release,
 )
+from .service.daily_research_service_release_startup import (
+    DailyResearchServiceReleaseStartupError,
+    daily_research_service_release_startup_check_report,
+    load_daily_research_service_release_startup,
+)
 from .service.daily_research_service_run import (
     DailyResearchServiceRunError,
     run_daily_research_service,
@@ -844,6 +849,9 @@ def _build_parser() -> argparse.ArgumentParser:
     receipt_service.add_argument("--daily-launch-gate", type=Path)
     receipt_service.add_argument("--daily-launch-gate-root", type=Path)
     receipt_service.add_argument("--daily-launch-gate-audit", type=Path)
+    receipt_service.add_argument("--daily-release-manifest", type=Path)
+    receipt_service.add_argument("--daily-release-report", type=Path)
+    receipt_service.add_argument("--daily-release-audit-report", type=Path)
     receipt_service.add_argument(
         "--host",
         choices=("127.0.0.1", "::1"),
@@ -876,9 +884,7 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_service_run.add_argument("--daily-launch-gate", type=Path, required=True)
     daily_service_run.add_argument("--daily-launch-gate-root", type=Path, required=True)
     daily_service_run.add_argument("--daily-launch-gate-audit", type=Path, required=True)
-    daily_service_run.add_argument(
-        "--startup-timeout-seconds", type=float, default=10.0
-    )
+    daily_service_run.add_argument("--startup-timeout-seconds", type=float, default=10.0)
     daily_service_run.add_argument(
         "--probe-timeout-seconds",
         type=float,
@@ -1944,6 +1950,78 @@ def run_market_aware_session_history_final_receipt(
 
 
 def run_read_only_receipt_server(args: argparse.Namespace) -> int:
+    release_values = (
+        args.daily_release_manifest,
+        args.daily_release_report,
+        args.daily_release_audit_report,
+    )
+    if any(value is not None for value in release_values):
+        if not all(value is not None for value in release_values):
+            print(
+                "CONFIG_INVALID: daily release options must be provided as a complete set",
+                file=sys.stderr,
+            )
+            return 2
+        if any(
+            value is not None
+            for value in (
+                args.launch_manifest,
+                args.receipt,
+                args.receipt_report,
+                args.daily_admission,
+                args.daily_admission_report,
+                args.daily_admission_root,
+                args.daily_launch_gate,
+                args.daily_launch_gate_root,
+                args.daily_launch_gate_audit,
+                args.host,
+                args.port,
+            )
+        ):
+            print(
+                "CONFIG_INVALID: daily release options cannot be combined with "
+                "legacy launch options",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            startup = load_daily_research_service_release_startup(
+                manifest_path=args.daily_release_manifest,
+                report_path=args.daily_release_report,
+                audit_report_path=args.daily_release_audit_report,
+                artifact_root=args.artifact_root,
+            )
+        except DailyResearchServiceReleaseStartupError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 2 if exc.code in {"ARTIFACT_ROOT_INVALID", "CONFIG_INVALID"} else 1
+        if args.check_only:
+            print(
+                json.dumps(
+                    daily_research_service_release_startup_check_report(startup),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        config = startup.gate_config
+        try:
+            serve_read_only_receipt(
+                receipt_path=config.receipt_path,
+                receipt_report_path=config.receipt_report_path,
+                artifact_root=config.artifact_root,
+                host=config.host,
+                port=config.port,
+                daily_admission_path=config.daily_admission_path,
+                daily_admission_report_path=config.daily_admission_report_path,
+                daily_admission_root=config.artifact_root,
+            )
+        except ReadOnlyReceiptServiceError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 1
+        except KeyboardInterrupt:
+            return 0
+        return 0
+
     gate_values = (args.daily_launch_gate, args.daily_launch_gate_root)
     if any(value is not None for value in (*gate_values, args.daily_launch_gate_audit)):
         if not all(value is not None for value in gate_values):
