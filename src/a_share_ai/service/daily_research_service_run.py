@@ -153,6 +153,8 @@ def _stop_process(process: subprocess.Popen[bytes]) -> tuple[bool, bool]:
             stop_signal_issued = True
             process.wait(timeout=5)
         except (OSError, subprocess.TimeoutExpired):
+            if not stop_signal_issued and process.poll() is not None:
+                return False, True
             return process.poll() is not None, False
     return process.poll() is not None, False
 

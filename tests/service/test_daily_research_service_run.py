@@ -417,6 +417,51 @@ def test_failed_terminate_and_kill_while_alive_is_stop_failure(tmp_path: Path) -
     assert report["issues"][0]["code"] == "SERVICE_STOP_FAILED"
 
 
+def test_exit_during_failed_kill_is_reported_as_uncontrolled_exit(tmp_path: Path) -> None:
+    root, gate_dir, audit_path, _ = _root_and_gate(tmp_path)
+
+    class ExitDuringKillProcess:
+        def __init__(self) -> None:
+            self.poll_count = 0
+
+        def poll(self) -> int | None:
+            self.poll_count += 1
+            return 0 if self.poll_count >= 3 else None
+
+        def terminate(self) -> None:
+            raise OSError("terminate failed")
+
+        def kill(self) -> None:
+            raise OSError("kill failed")
+
+    process = ExitDuringKillProcess()
+    with (
+        patch.object(run_module.subprocess, "Popen", return_value=process),
+        patch.object(
+            run_module,
+            "probe_daily_research_service",
+            return_value={
+                "status": "ready",
+                "daily_admission_ready": True,
+                "decision_ready": False,
+            },
+        ),
+    ):
+        report, exit_code = run_daily_research_service(
+            gate_path=gate_dir / "daily_research_service_launch_gate.json",
+            artifact_root=root,
+            audit_path=audit_path,
+            startup_timeout_seconds=1,
+            probe_timeout_seconds=0.1,
+            output_dir=root / "run-report",
+        )
+
+    assert exit_code == 1
+    assert report["service_stopped"] is False
+    assert report["run_ready"] is False
+    assert report["issues"][0]["code"] == "SERVICE_EXITED"
+
+
 @pytest.mark.parametrize(
     ("option", "value"),
     [("--startup-timeout-seconds", "0"), ("--probe-timeout-seconds", "nan")],
