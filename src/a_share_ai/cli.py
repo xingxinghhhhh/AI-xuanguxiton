@@ -148,6 +148,10 @@ from .service.daily_research_service_release_run import (
     DailyResearchServiceReleaseRunError,
     run_daily_research_service_release,
 )
+from .service.daily_research_service_release_run_audit import (
+    DailyResearchServiceReleaseRunAuditError,
+    audit_daily_research_service_release_run,
+)
 from .service.daily_research_service_release_startup import (
     DailyResearchServiceReleaseStartupError,
     daily_research_service_release_startup_check_report,
@@ -919,6 +923,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
     )
     daily_service_release_run.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_release_run_audit = subparsers.add_parser(
+        "audit-daily-research-service-release-run",
+        help="independently audit one daily research service release run",
+    )
+    daily_service_release_run_audit.add_argument("--run-report", type=Path, required=True)
+    daily_service_release_run_audit.add_argument("--artifact-root", type=Path, required=True)
+    daily_service_release_run_audit.add_argument("--output-dir", type=Path, required=True)
 
     daily_service_release = subparsers.add_parser(
         "build-daily-research-service-release",
@@ -2335,6 +2347,20 @@ def run_daily_research_service_release_run_command(args: argparse.Namespace) -> 
     return exit_code
 
 
+def run_daily_research_service_release_run_audit_command(args: argparse.Namespace) -> int:
+    try:
+        report = audit_daily_research_service_release_run(
+            run_report_path=args.run_report,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceReleaseRunAuditError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0 if report.get("audit_ready") is True and report.get("status") == "ready" else 1
+
+
 def run_daily_research_service_audit_command(args: argparse.Namespace) -> int:
     try:
         report = audit_daily_research_service_run(
@@ -2602,6 +2628,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_command(args)
     if args.command == "run-daily-research-service-release":
         return run_daily_research_service_release_run_command(args)
+    if args.command == "audit-daily-research-service-release-run":
+        return run_daily_research_service_release_run_audit_command(args)
     if args.command == "audit-daily-research-service-run":
         return run_daily_research_service_audit_command(args)
     if args.command == "build-daily-research-service-release":

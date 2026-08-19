@@ -126,6 +126,27 @@ The receipt contains relative paths, hashes, statuses, and sanitized issues;
 it never records process logs or secrets and keeps `decision_ready=false`.
 This is a one-shot manual check, not a scheduler or daemon.
 
+## Independent release-run audit
+
+After a Node71 one-shot run, independently audit its receipt without starting
+anything:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run \
+  --run-report reports/daily-service-release-run/daily_research_service_release_run_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-audit
+```
+
+The audit rechecks the Node71 receipt and the Node68/69, Node66/67, and Node65
+artifact chain, including actual hashes, self-hashes, path bindings, versions,
+timestamps, and independent readiness state. It never starts a service, calls
+Node60, sends HTTP, reads API keys, or changes inputs. A structurally valid
+blocked/failed run is auditable but returns CLI exit `1`; only an independently
+verified ready run returns `0`. Invalid configuration returns `2`. The output
+is `daily_research_service_release_run_audit_report.json` and always keeps
+`decision_ready=false`.
+
 ## Independent release admission audit
 
 After building the Node68 release admission, audit it independently:

@@ -1278,6 +1278,26 @@ boundaries return exit `1` in the report and configuration errors return exit
 handoff, start a service, access a network/API key, schedule work, or authorize
 trading.
 
+## Independent release-run audit
+
+Node72 independently audits the Node71 release-run receipt and its complete
+Node68/69 → Node66/67 → Node65 artifact chain:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run \
+  --run-report reports/daily-service-release-run/daily_research_service_release_run_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-audit
+```
+
+The audit is read-only: it does not start a service, call Node60 or HTTP, read
+API keys, refresh data, or modify input artifacts. It rechecks actual hashes,
+self-hashes, fixed filenames, normalized paths, versions, timestamps, and
+startup/probe/stop state. A valid blocked or failed run may be
+`audit_ready=true` but still returns CLI `1`; only an independently verified
+ready run returns `0`. Invalid configuration returns `2`, and
+`decision_ready=false` remains enforced.
+
 ## Independent daily research service run audit
 
 Node67 audits an existing Node66 run report without starting the loopback

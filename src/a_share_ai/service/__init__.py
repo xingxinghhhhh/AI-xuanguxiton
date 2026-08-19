@@ -46,6 +46,12 @@ from .daily_research_service_release_run import (
     DailyResearchServiceReleaseRunError,
     run_daily_research_service_release,
 )
+from .daily_research_service_release_run_audit import (
+    DAILY_RESEARCH_SERVICE_RELEASE_RUN_AUDIT_REPORT_NAME,
+    DAILY_RESEARCH_SERVICE_RELEASE_RUN_AUDIT_VERSION,
+    DailyResearchServiceReleaseRunAuditError,
+    audit_daily_research_service_release_run,
+)
 from .daily_research_service_release_startup import (
     DAILY_RESEARCH_SERVICE_RELEASE_STARTUP_VERSION,
     DailyResearchServiceReleaseStartupConfig,
@@ -120,6 +126,10 @@ __all__ = [
     "DAILY_RESEARCH_SERVICE_RELEASE_RUN_VERSION",
     "DailyResearchServiceReleaseRunError",
     "run_daily_research_service_release",
+    "DAILY_RESEARCH_SERVICE_RELEASE_RUN_AUDIT_REPORT_NAME",
+    "DAILY_RESEARCH_SERVICE_RELEASE_RUN_AUDIT_VERSION",
+    "DailyResearchServiceReleaseRunAuditError",
+    "audit_daily_research_service_release_run",
     "DAILY_RESEARCH_SERVICE_LAUNCH_GATE_VERSION",
     "DailyResearchServiceLaunchGateConfig",
     "DailyResearchServiceLaunchGateError",
