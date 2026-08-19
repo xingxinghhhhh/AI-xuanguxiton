@@ -345,6 +345,24 @@ cross-checked input snapshot for a future decision module. This is an input
 readiness gate only; it is not a trading authorization and always keeps
 `decision_ready=false`.
 
+## Independent daily research service release audit
+
+Node69 independently verifies the Node68 release admission:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release \
+  --manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --report reports/daily-service-release/daily_research_service_release_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-audit
+```
+
+It rechecks both Node68 files and the referenced Node66/67 chain, recomputes
+`release_ready`, and writes a deterministic
+`daily_research_service_release_audit_report.json`. Failed or blocked releases
+may be audited but are never promoted; the command is read-only and keeps
+`decision_ready=false`.
+
 ## Research freshness audit
 
 Check whether a published research package corresponds to the latest completed

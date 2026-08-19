@@ -101,6 +101,23 @@ writes a self-hashed `daily_research_service_run_report.json`. It does not
 schedule, refresh data, call AI, expose a public listener, or change
 `decision_ready=false`.
 
+## Independent release admission audit
+
+After building the Node68 release admission, audit it independently:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release \
+  --manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --report reports/daily-service-release/daily_research_service_release_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-audit
+```
+
+The audit is offline and read-only. It checks the manifest/report self-hashes,
+manifest binding, actual Node66/67 hashes, paths, timestamps and readiness;
+it never rebuilds or starts the service and always preserves
+`decision_ready=false`.
+
 ## Read-only service release admission
 
 Bind the completed run and independent audit before a human deployment or
