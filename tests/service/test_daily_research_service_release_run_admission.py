@@ -179,6 +179,54 @@ def test_invalid_upstream_boolean_type_is_rejected(tmp_path: Path, invalid_value
     assert admission["issues"][0]["code"] == "FIELD_MISMATCH"
 
 
+@pytest.mark.parametrize("field", ["run_version", "release_version", "startup_version"])
+def test_ready_node72_version_cannot_be_null(tmp_path: Path, field: str) -> None:
+    root, run_report, audit_report = _make_admission(tmp_path / "version")
+    audit = json.loads(audit_report.read_text(encoding="utf-8"))
+    audit[field] = None
+    _write_hashed(audit_report, audit)
+    assert main(_args(root, run_report, audit_report, root / "admission")) == 1
+    admission, _, _, _ = _read_outputs(root / "admission")
+    assert admission["issues"][0]["code"] == "VERSION_MISMATCH"
+
+
+def test_blocked_node72_identity_cannot_be_empty(tmp_path: Path) -> None:
+    root, run_report, audit_report = _make_admission(tmp_path / "blocked-identity", blocked=True)
+    audit = json.loads(audit_report.read_text(encoding="utf-8"))
+    audit["symbol"] = None
+    audit["as_of"] = None
+    audit["evaluation_at"] = None
+    _write_hashed(audit_report, audit)
+    assert main(_args(root, run_report, audit_report, root / "admission")) == 1
+    admission, _, _, _ = _read_outputs(root / "admission")
+    assert admission["issues"][0]["code"] in {"FIELD_MISMATCH", "TIME_MISMATCH"}
+
+
+@pytest.mark.parametrize(
+    "field,expected_code",
+    [
+        ("node66_run_report_path", "PATH_OUTSIDE_ROOT"),
+        ("node66_run_report_sha256", "FIELD_MISMATCH"),
+        ("node67_run_audit_report_path", "PATH_OUTSIDE_ROOT"),
+        ("node67_run_audit_report_sha256", "FIELD_MISMATCH"),
+        ("node65_gate_path", "PATH_OUTSIDE_ROOT"),
+        ("node65_gate_sha256", "FIELD_MISMATCH"),
+        ("node65_audit_path", "PATH_OUTSIDE_ROOT"),
+        ("node65_audit_sha256", "FIELD_MISMATCH"),
+    ],
+)
+def test_ready_node72_upstream_bindings_cannot_be_null(
+    tmp_path: Path, field: str, expected_code: str
+) -> None:
+    root, run_report, audit_report = _make_admission(tmp_path / "upstream-binding")
+    audit = json.loads(audit_report.read_text(encoding="utf-8"))
+    audit[field] = None
+    _write_hashed(audit_report, audit)
+    assert main(_args(root, run_report, audit_report, root / "admission")) == 1
+    admission, _, _, _ = _read_outputs(root / "admission")
+    assert admission["issues"][0]["code"] == expected_code
+
+
 def test_unknown_field_and_invalid_configuration_have_stable_codes(tmp_path: Path) -> None:
     root, run_report, audit_report = _make_admission(tmp_path / "config")
     audit = json.loads(audit_report.read_text(encoding="utf-8"))

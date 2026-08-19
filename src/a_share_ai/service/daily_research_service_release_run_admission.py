@@ -345,12 +345,19 @@ def _validate_audit(audit: Mapping[str, Any]) -> list[dict[str, str]]:
         raise DailyResearchServiceReleaseRunAdmissionError(
             "VERSION_MISMATCH", "Node72 audit version is invalid"
         )
+    if not isinstance(audit["audit_ready"], bool):
+        raise DailyResearchServiceReleaseRunAdmissionError(
+            "FIELD_MISMATCH", "Node72 audit_ready is invalid"
+        )
+    audit_ready = audit["audit_ready"] is True
     for field, expected in (
         ("run_version", DAILY_RESEARCH_SERVICE_RELEASE_RUN_VERSION),
         ("release_version", DAILY_RESEARCH_SERVICE_RELEASE_VERSION),
         ("startup_version", DAILY_RESEARCH_SERVICE_RELEASE_STARTUP_VERSION),
     ):
-        if audit[field] is not None and audit[field] != expected:
+        if (audit_ready and audit[field] != expected) or (
+            not audit_ready and audit[field] is not None and audit[field] != expected
+        ):
             raise DailyResearchServiceReleaseRunAdmissionError(
                 "VERSION_MISMATCH", f"Node72 {field} is invalid"
             )
@@ -393,7 +400,7 @@ def _validate_audit(audit: Mapping[str, Any]) -> list[dict[str, str]]:
         raise DailyResearchServiceReleaseRunAdmissionError(
             "FIELD_MISMATCH", "Node72 probe_exit_code is invalid"
         )
-    for field in (
+    path_fields = (
         "run_report_path",
         "release_manifest_path",
         "release_report_path",
@@ -402,10 +409,11 @@ def _validate_audit(audit: Mapping[str, Any]) -> list[dict[str, str]]:
         "node67_run_audit_report_path",
         "node65_gate_path",
         "node65_audit_path",
-    ):
-        if audit[field] is not None:
+    )
+    for field in path_fields:
+        if audit_ready or audit[field] is not None:
             _relative(audit[field], label=f"Node72 {field}")
-    for field in (
+    hash_fields = (
         "run_report_sha256",
         "release_manifest_sha256",
         "release_report_sha256",
@@ -414,16 +422,21 @@ def _validate_audit(audit: Mapping[str, Any]) -> list[dict[str, str]]:
         "node67_run_audit_report_sha256",
         "node65_gate_sha256",
         "node65_audit_sha256",
-    ):
-        if audit[field] is not None:
+    )
+    for field in hash_fields:
+        if audit_ready or audit[field] is not None:
             _sha(audit[field], label=f"Node72 {field}")
+    if audit_ready and (not isinstance(audit["symbol"], str) or not audit["symbol"].strip()):
+        raise DailyResearchServiceReleaseRunAdmissionError(
+            "FIELD_MISMATCH", "Node72 symbol is invalid"
+        )
     if audit["symbol"] is not None and (
         not isinstance(audit["symbol"], str) or not audit["symbol"].strip()
     ):
         raise DailyResearchServiceReleaseRunAdmissionError(
             "FIELD_MISMATCH", "Node72 symbol is invalid"
         )
-    if audit["as_of"] is not None:
+    if audit_ready or audit["as_of"] is not None:
         as_of = _time(audit["as_of"], label="Node72 as_of")
         evaluation_at = _time(audit["evaluation_at"], label="Node72 evaluation_at")
         if as_of > evaluation_at:
