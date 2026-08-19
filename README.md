@@ -1342,6 +1342,34 @@ ready pair returns `0`; blocked or failed pairs remain auditable but return
 not resistance to coordinated rewriting of both files, and does not replace
 the independent Node71 receipt or Node72 audit.
 
+## Audited release-run admission startup
+
+Node75 makes the Node73 admission and Node74 pair audit the final read-only
+startup gate for the existing Node70 release service:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --artifact-root reports \
+  --daily-run-admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --daily-run-admission-report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --daily-run-admission-audit reports/daily-service-release-run-admission-audit/daily_research_service_release_run_admission_audit_report.json \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --output-dir reports/daily-service-release-run-admission-startup \
+  --check-only
+```
+
+All three Node73/74 admission paths and all three Node70 release paths are
+required, and `--output-dir` must stay inside `--artifact-root`. The new mode
+cannot be mixed with legacy launch options. Only a fully ready admission/audit
+and release startup chain may bind the existing loopback service. Check-only
+writes and prints a deterministic, compact-self-hashed startup report without
+binding; blocked, failed, tampered, or invalid inputs return `1`; configuration
+errors return `2`. Actual startup writes the same fixed report after a
+successful bind and keeps `decision_ready=false`; old startup modes are
+unchanged.
+
 ## Independent daily research service run audit
 
 Node67 audits an existing Node66 run report without starting the loopback

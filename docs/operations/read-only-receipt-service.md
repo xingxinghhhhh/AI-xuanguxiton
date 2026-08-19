@@ -273,3 +273,39 @@ This audit establishes internal consistency of the supplied Node73 pair. It
 cannot detect a coordinated rewrite of both files without an external trusted
 reference, and it does not replace the independent Node71 run receipt or
 Node72 audit.
+
+## Audited release-run admission startup
+
+Use Node75 when the completed release-run admission must gate the existing
+loopback receipt service:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --artifact-root reports \
+  --daily-run-admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --daily-run-admission-report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --daily-run-admission-audit reports/daily-service-release-run-admission-audit/daily_research_service_release_run_admission_audit_report.json \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --output-dir reports/daily-service-release-run-admission-startup \
+  --check-only
+```
+
+The three Node73/74 admission inputs and three Node70 release inputs are a
+required group. `--output-dir` is required for this mode and must be within
+`--artifact-root`; legacy direct, launch-manifest, Node63, and Node65 modes do
+not require it and remain unchanged. Check-only validates the admission/audit
+pair and release startup chain, writes and prints the exact
+`daily_research_service_release_run_admission_startup_report.json` bytes, and
+never binds. Only a ready chain returns `0`; blocked, failed, tampered, or
+invalid evidence returns `1`; configuration errors return `2`.
+
+For actual startup, Node75 completes the same checks before creating the
+existing loopback server. It writes the ready report only after the socket is
+successfully bound, then serves the existing routes. Bind or report-write
+failures close the server and fail closed. The report is compact-self-hashed,
+relative-path-only, keeps `decision_ready=false`, and contains no PID,
+command-line, logs, credentials, or secrets. This node is a startup binding
+check, not a long-term health monitor or a replacement for the Node71/72
+evidence chain.

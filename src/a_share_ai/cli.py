@@ -156,6 +156,10 @@ from .service.daily_research_service_release_run_admission_audit import (
     DailyResearchServiceReleaseRunAdmissionAuditError,
     audit_daily_research_service_release_run_admission,
 )
+from .service.daily_research_service_release_run_admission_startup import (
+    DailyResearchServiceReleaseRunAdmissionStartupError,
+    run_daily_research_service_release_run_admission_startup,
+)
 from .service.daily_research_service_release_run_audit import (
     DailyResearchServiceReleaseRunAuditError,
     audit_daily_research_service_release_run,
@@ -868,6 +872,10 @@ def _build_parser() -> argparse.ArgumentParser:
     receipt_service.add_argument("--daily-release-manifest", type=Path)
     receipt_service.add_argument("--daily-release-report", type=Path)
     receipt_service.add_argument("--daily-release-audit-report", type=Path)
+    receipt_service.add_argument("--daily-run-admission", type=Path)
+    receipt_service.add_argument("--daily-run-admission-report", type=Path)
+    receipt_service.add_argument("--daily-run-admission-audit", type=Path)
+    receipt_service.add_argument("--output-dir", type=Path)
     receipt_service.add_argument(
         "--host",
         choices=("127.0.0.1", "::1"),
@@ -2010,6 +2018,76 @@ def run_market_aware_session_history_final_receipt(
 
 
 def run_read_only_receipt_server(args: argparse.Namespace) -> int:
+    admission_values = (
+        args.daily_run_admission,
+        args.daily_run_admission_report,
+        args.daily_run_admission_audit,
+    )
+    if any(value is not None for value in admission_values):
+        release_values = (
+            args.daily_release_manifest,
+            args.daily_release_report,
+            args.daily_release_audit_report,
+        )
+        if not all(value is not None for value in admission_values):
+            print(
+                "CONFIG_INVALID: daily run admission options must be provided as a complete set",
+                file=sys.stderr,
+            )
+            return 2
+        if not all(value is not None for value in release_values):
+            print(
+                "CONFIG_INVALID: daily release options must be provided as a complete set",
+                file=sys.stderr,
+            )
+            return 2
+        if args.output_dir is None:
+            print(
+                "CONFIG_INVALID: daily run admission startup requires --output-dir",
+                file=sys.stderr,
+            )
+            return 2
+        if any(
+            value is not None
+            for value in (
+                args.launch_manifest,
+                args.receipt,
+                args.receipt_report,
+                args.daily_admission,
+                args.daily_admission_report,
+                args.daily_admission_root,
+                args.daily_launch_gate,
+                args.daily_launch_gate_root,
+                args.daily_launch_gate_audit,
+                args.host,
+                args.port,
+            )
+        ):
+            print(
+                "CONFIG_INVALID: daily run admission startup cannot be combined with "
+                "legacy launch options",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            code, raw = run_daily_research_service_release_run_admission_startup(
+                admission_path=args.daily_run_admission,
+                report_path=args.daily_run_admission_report,
+                audit_path=args.daily_run_admission_audit,
+                release_manifest_path=args.daily_release_manifest,
+                release_report_path=args.daily_release_report,
+                release_audit_path=args.daily_release_audit_report,
+                artifact_root=args.artifact_root,
+                output_dir=args.output_dir,
+                check_only=args.check_only,
+            )
+        except DailyResearchServiceReleaseRunAdmissionStartupError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 2 if exc.configuration else 1
+        if raw is not None:
+            sys.stdout.buffer.write(raw)
+        return code
+
     release_values = (
         args.daily_release_manifest,
         args.daily_release_report,
@@ -2034,6 +2112,7 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
                 args.daily_launch_gate,
                 args.daily_launch_gate_root,
                 args.daily_launch_gate_audit,
+                args.output_dir,
                 args.host,
                 args.port,
             )
@@ -2102,6 +2181,7 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
                 args.daily_admission,
                 args.daily_admission_report,
                 args.daily_admission_root,
+                args.output_dir,
                 args.host,
                 args.port,
             )
@@ -2211,7 +2291,14 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
         return 2
     if args.launch_manifest is not None:
         if any(
-            value is not None for value in (args.receipt, args.receipt_report, args.host, args.port)
+            value is not None
+            for value in (
+                args.receipt,
+                args.receipt_report,
+                args.host,
+                args.port,
+                args.output_dir,
+            )
         ):
             print(
                 "CONFIG_INVALID: launch manifest cannot be combined with direct launch options",
@@ -2265,6 +2352,9 @@ def run_read_only_receipt_server(args: argparse.Namespace) -> int:
 
     if args.check_only:
         print("CONFIG_INVALID: --check-only requires --launch-manifest", file=sys.stderr)
+        return 2
+    if args.output_dir is not None:
+        print("CONFIG_INVALID: --output-dir requires daily run admission startup", file=sys.stderr)
         return 2
     if args.receipt is None or args.receipt_report is None:
         print(
