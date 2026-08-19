@@ -27,6 +27,13 @@ from .daily_research_service_probe import (
     daily_research_service_probe_exit_code,
     probe_daily_research_service,
 )
+from .daily_research_service_release import (
+    DAILY_RESEARCH_SERVICE_RELEASE_MANIFEST_NAME,
+    DAILY_RESEARCH_SERVICE_RELEASE_REPORT_NAME,
+    DAILY_RESEARCH_SERVICE_RELEASE_VERSION,
+    DailyResearchServiceReleaseError,
+    build_daily_research_service_release,
+)
 from .daily_research_service_run import (
     DAILY_RESEARCH_SERVICE_RUN_REPORT_NAME,
     DAILY_RESEARCH_SERVICE_RUN_VERSION,
@@ -76,6 +83,11 @@ __all__ = [
     "DAILY_RESEARCH_SERVICE_RUN_AUDIT_VERSION",
     "DailyResearchServiceRunAuditError",
     "audit_daily_research_service_run",
+    "DAILY_RESEARCH_SERVICE_RELEASE_MANIFEST_NAME",
+    "DAILY_RESEARCH_SERVICE_RELEASE_REPORT_NAME",
+    "DAILY_RESEARCH_SERVICE_RELEASE_VERSION",
+    "DailyResearchServiceReleaseError",
+    "build_daily_research_service_release",
     "DAILY_RESEARCH_SERVICE_LAUNCH_GATE_VERSION",
     "DailyResearchServiceLaunchGateConfig",
     "DailyResearchServiceLaunchGateError",
