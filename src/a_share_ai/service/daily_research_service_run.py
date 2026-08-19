@@ -67,9 +67,11 @@ def _safe_relative(path: Path, *, root: Path) -> str | None:
         return None
 
 
-def _file_sha(path: Path) -> str | None:
+def _file_sha(path: Path, *, root: Path) -> str | None:
     try:
-        return sha256_bytes(path.resolve().read_bytes())
+        candidate = path.resolve()
+        candidate.relative_to(root.resolve())
+        return sha256_bytes(candidate.read_bytes())
     except (OSError, ValueError):
         return None
 
@@ -86,12 +88,14 @@ def _valid_timeout(value: Any, *, label: str) -> float:
 
 
 def _base_report(*, root: Path, gate_path: Path, audit_path: Path) -> dict[str, Any]:
+    gate_relative = _safe_relative(gate_path, root=root)
+    audit_relative = _safe_relative(audit_path, root=root)
     return {
         "run_version": DAILY_RESEARCH_SERVICE_RUN_VERSION,
-        "gate_path": _safe_relative(gate_path, root=root),
-        "gate_sha256": _file_sha(gate_path),
-        "audit_path": _safe_relative(audit_path, root=root),
-        "audit_sha256": _file_sha(audit_path),
+        "gate_path": gate_relative,
+        "gate_sha256": _file_sha(gate_path, root=root) if gate_relative is not None else None,
+        "audit_path": audit_relative,
+        "audit_sha256": _file_sha(audit_path, root=root) if audit_relative is not None else None,
         "symbol": None,
         "as_of": None,
         "evaluation_at": None,
@@ -226,6 +230,7 @@ def run_daily_research_service(
         return report, 1
 
     process: subprocess.Popen[bytes] | None = None
+    abnormal_exit_before_stop = False
     deadline = time.monotonic() + startup_timeout
     try:
         process = subprocess.Popen(
@@ -254,6 +259,12 @@ def run_daily_research_service(
             report["probe_status"] = probe_report.get("status")
             report["probe_exit_code"] = daily_research_service_probe_exit_code(probe_report)
             if report["probe_exit_code"] == 0:
+                if process.poll() is not None:
+                    abnormal_exit_before_stop = True
+                    report["issues"] = [_issue(
+                        "SERVICE_EXITED", "service process exited before controlled stop"
+                    )]
+                    break
                 report["issues"] = []
                 break
             issues = probe_report.get("issues")
@@ -280,8 +291,15 @@ def run_daily_research_service(
         report["issues"] = [_issue("SERVICE_START_FAILED", "service process could not start")]
     finally:
         if process is not None:
+            abnormal_exit_before_stop = abnormal_exit_before_stop or process.poll() is not None
             report["service_stopped"] = _stop_process(process)
 
+    if abnormal_exit_before_stop:
+        report["run_ready"] = False
+        if not report["issues"]:
+            report["issues"] = [_issue(
+                "SERVICE_EXITED", "service process exited before controlled stop"
+            )]
     if report["run_ready"] and not report["service_stopped"]:
         report["run_ready"] = False
         report["issues"] = [_issue("SERVICE_STOP_FAILED", "service process did not stop")]

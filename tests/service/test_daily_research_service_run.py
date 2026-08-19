@@ -3,11 +3,14 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from a_share_ai.cli import main
 from a_share_ai.market.replay import sha256_bytes
+from a_share_ai.service import daily_research_service_run as run_module
+from a_share_ai.service.daily_research_service_run import run_daily_research_service
 from tests.service.test_daily_research_service_launch_gate import (
     _build_gate,
     _build_gate_audit,
@@ -148,6 +151,172 @@ def test_tampered_audit_fails_closed_without_listening(tmp_path: Path) -> None:
     assert report["run_ready"] is False
     assert report["issues"][0]["code"] == "CHAIN_MISMATCH"
     assert _port_is_closed(port)
+
+
+def test_external_gate_and_audit_are_rejected_before_hashing(tmp_path: Path) -> None:
+    root = tmp_path / "artifact-root"
+    root.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"secret":"must not be read by the runner"}\n')
+
+    report, exit_code = run_daily_research_service(
+        gate_path=outside,
+        artifact_root=root,
+        audit_path=outside,
+        startup_timeout_seconds=1,
+        probe_timeout_seconds=0.1,
+        output_dir=root / "run-report",
+    )
+
+    assert exit_code == 1
+    assert report["gate_path"] is None
+    assert report["gate_sha256"] is None
+    assert report["audit_path"] is None
+    assert report["audit_sha256"] is None
+    assert report["issues"][0]["code"] in {"PATH_OUTSIDE_ARTIFACT_ROOT", "INPUT_INVALID"}
+
+
+def test_probe_success_after_child_exit_never_becomes_ready(tmp_path: Path) -> None:
+    root, gate_dir, audit_path, _ = _root_and_gate(tmp_path)
+
+    class ExitedAfterProbe:
+        def __init__(self) -> None:
+            self.poll_calls = 0
+
+        def poll(self) -> int | None:
+            self.poll_calls += 1
+            return None if self.poll_calls == 1 else 1
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 1
+
+        def kill(self) -> None:
+            return None
+
+    process = ExitedAfterProbe()
+    with (
+        patch.object(run_module.subprocess, "Popen", return_value=process),
+        patch.object(
+            run_module,
+            "probe_daily_research_service",
+            return_value={
+                "status": "ready",
+                "daily_admission_ready": True,
+                "decision_ready": False,
+            },
+        ),
+    ):
+        report, exit_code = run_daily_research_service(
+            gate_path=gate_dir / "daily_research_service_launch_gate.json",
+            artifact_root=root,
+            audit_path=audit_path,
+            startup_timeout_seconds=1,
+            probe_timeout_seconds=0.1,
+            output_dir=root / "run-report",
+        )
+
+    assert exit_code == 1
+    assert report["probe_status"] == "ready"
+    assert report["probe_exit_code"] == 0
+    assert report["run_ready"] is False
+    assert report["issues"][0]["code"] == "SERVICE_EXITED"
+
+
+def test_probe_timeout_stops_child_and_never_becomes_ready(tmp_path: Path) -> None:
+    root, gate_dir, audit_path, _ = _root_and_gate(tmp_path)
+
+    class AliveProcess:
+        def __init__(self) -> None:
+            self.terminated = False
+
+        def poll(self) -> int | None:
+            return 0 if self.terminated else None
+
+        def terminate(self) -> None:
+            self.terminated = True
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 0
+
+        def kill(self) -> None:
+            self.terminated = True
+
+    process = AliveProcess()
+    with (
+        patch.object(run_module.subprocess, "Popen", return_value=process),
+        patch.object(
+            run_module,
+            "probe_daily_research_service",
+            return_value={
+                "status": "invalid",
+                "issues": [{"code": "SERVICE_UNAVAILABLE", "message": "service request failed"}],
+            },
+        ),
+    ):
+        report, exit_code = run_daily_research_service(
+            gate_path=gate_dir / "daily_research_service_launch_gate.json",
+            artifact_root=root,
+            audit_path=audit_path,
+            startup_timeout_seconds=0.1,
+            probe_timeout_seconds=0.01,
+            output_dir=root / "run-report",
+        )
+
+    assert exit_code == 1
+    assert report["run_ready"] is False
+    assert report["service_stopped"] is True
+    assert process.terminated is True
+
+
+def test_failed_stop_never_reports_ready(tmp_path: Path) -> None:
+    root, gate_dir, audit_path, _ = _root_and_gate(tmp_path)
+
+    class UnstoppableProcess:
+        def __init__(self) -> None:
+            self.killed = False
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            raise OSError("terminate failed")
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 0
+
+        def kill(self) -> None:
+            self.killed = True
+
+    process = UnstoppableProcess()
+    with (
+        patch.object(run_module.subprocess, "Popen", return_value=process),
+        patch.object(
+            run_module,
+            "probe_daily_research_service",
+            return_value={
+                "status": "ready",
+                "daily_admission_ready": True,
+                "decision_ready": False,
+            },
+        ),
+    ):
+        report, exit_code = run_daily_research_service(
+            gate_path=gate_dir / "daily_research_service_launch_gate.json",
+            artifact_root=root,
+            audit_path=audit_path,
+            startup_timeout_seconds=1,
+            probe_timeout_seconds=0.1,
+            output_dir=root / "run-report",
+        )
+
+    assert exit_code == 1
+    assert report["run_ready"] is False
+    assert report["service_stopped"] is False
+    assert report["issues"][0]["code"] == "SERVICE_STOP_FAILED"
+    assert process.killed is True
 
 
 @pytest.mark.parametrize(
