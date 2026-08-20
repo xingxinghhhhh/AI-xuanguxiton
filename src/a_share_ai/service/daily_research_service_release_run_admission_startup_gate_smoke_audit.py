@@ -173,8 +173,13 @@ def _issues(value: Any, *, label: str) -> None:
 
 
 def _identity(payload: Mapping[str, Any]) -> None:
-    if payload["smoke_status"] in {"blocked", "failed"} and all(
+    if (
+        payload["smoke_status"] in {"blocked", "failed"}
+        and payload["gate_status"] in {"blocked", "failed"}
+        and payload["gate_ready"] is False
+        and all(
         payload[field] is None for field in ("symbol", "as_of", "evaluation_at")
+        )
     ):
         return
     if not isinstance(payload["symbol"], str) or not payload["symbol"].strip():
@@ -263,16 +268,74 @@ def _validate_state(payload: Mapping[str, Any]) -> None:
             and payload["startup_status"] == "not_started"
             and payload["service_started"] is False
             and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
             and payload["stop_status"] == "not_attempted"
             and payload["service_stopped"] is False
+            and payload["port_released"] is False
+            and payload["smoke_status"] == "failed"
+            and payload["smoke_ready"] is False
+        )
+        startup_failure = (
+            payload["startup_status"] == "failed"
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
+            and payload["port_released"] is False
+        )
+        probe_failure = (
+            payload["startup_status"] == "ready"
+            and payload["service_started"] is True
+            and payload["probe_status"] in {"failed", "timeout", "service_exited"}
+            and (
+                (payload["probe_status"] == "timeout" and payload["probe_exit_code"] is None)
+                or (
+                    payload["probe_status"] == "failed"
+                    and (
+                        payload["probe_exit_code"] is None or payload["probe_exit_code"] > 0
+                    )
+                )
+                or (
+                    payload["probe_status"] == "service_exited"
+                    and payload["probe_exit_code"] in {None, 0}
+                )
+            )
+            and (
+                (
+                    payload["stop_status"] == "controlled"
+                    and payload["service_stopped"] is True
+                )
+                or (
+                    payload["stop_status"] in {"uncontrolled_exit", "failed"}
+                    and payload["service_stopped"] is False
+                )
+            )
+        )
+        stop_failure = (
+            payload["startup_status"] == "ready"
+            and payload["service_started"] is True
+            and payload["probe_status"] == "ready"
+            and payload["probe_exit_code"] == 0
+            and payload["stop_status"] == "failed"
+            and payload["service_stopped"] is False
+            and payload["port_released"] is False
+        )
+        port_failure = (
+            payload["startup_status"] == "ready"
+            and payload["service_started"] is True
+            and payload["probe_status"] == "ready"
+            and payload["probe_exit_code"] == 0
+            and payload["stop_status"] == "controlled"
+            and payload["service_stopped"] is True
             and payload["port_released"] is False
         )
         runtime_failure = (
             payload["gate_status"] == "ready"
             and payload["gate_ready"] is True
-            and payload["startup_status"] in {"ready", "failed"}
             and payload["smoke_status"] == "failed"
             and payload["smoke_ready"] is False
+            and (startup_failure or probe_failure or stop_failure or port_failure)
         )
         valid = bool(issues) and (gate_failure or runtime_failure)
     else:
@@ -450,23 +513,25 @@ def audit_daily_research_service_release_run_admission_startup_gate_smoke(
                 "release audit report",
             ),
         }
-        paths_present = any(smoke[field] is not None for field in fields)
-        if paths_present:
-            for field, (filename, label) in fields.items():
-                value = smoke[field]
-                sha_field = field.replace("_path", "_sha256")
-                if value is None or smoke[sha_field] is None:
-                    raise _AuditFailure("PATH_INVALID", f"{label} binding is incomplete")
-                relative, actual_sha = _safe_file(
-                    value, root=root, label=label, expected_name=filename
-                )
-                declared_sha = _sha(smoke[sha_field], label=f"smoke report.{sha_field}")
-                if relative != value or actual_sha != declared_sha:
-                    raise _AuditFailure("CHAIN_MISMATCH", f"{label} binding differs")
-                result[field] = relative
-                result[sha_field] = actual_sha
-        elif smoke["smoke_status"] == "ready":
-            raise _AuditFailure("PATH_INVALID", "ready smoke report has no input bindings")
+        bound_count = 0
+        for field, (filename, label) in fields.items():
+            value = smoke[field]
+            sha_field = field.replace("_path", "_sha256")
+            if value is None and smoke[sha_field] is None:
+                continue
+            if value is None or smoke[sha_field] is None:
+                raise _AuditFailure("PATH_INVALID", f"{label} binding is incomplete")
+            relative, actual_sha = _safe_file(
+                value, root=root, label=label, expected_name=filename
+            )
+            declared_sha = _sha(smoke[sha_field], label=f"smoke report.{sha_field}")
+            if relative != value or actual_sha != declared_sha:
+                raise _AuditFailure("CHAIN_MISMATCH", f"{label} binding differs")
+            result[field] = relative
+            result[sha_field] = actual_sha
+            bound_count += 1
+        if smoke["smoke_status"] == "ready" and bound_count != len(fields):
+            raise _AuditFailure("PATH_INVALID", "ready smoke report has incomplete input bindings")
         result["audit_ready"] = True
         result["status"] = smoke["smoke_status"]
         _write_report(result, output_dir=output)
