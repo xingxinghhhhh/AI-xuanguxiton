@@ -1567,3 +1567,27 @@ startup/probe/cleanup failures, and port conflicts return `1`; invalid timeout,
 root, or output configuration returns `2`. The smoke receipt contains only
 relative paths and hashes, keeps `decision_ready=false`, never refreshes data
 or calls external APIs, and never authorizes trading.
+
+## Node77 independent startup smoke audit
+
+Node77 independently audits a Node76 smoke receipt using only files under the
+artifact root. It rechecks the smoke receipt self-hash, the declared admission
+and release file paths/SHA-256 values, and the Node75 preflight/startup reports;
+it does not start a process, open a socket, call HTTP, or claim to prove that a
+historical port was released:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission-startup-smoke \
+  --smoke-report reports/daily-service-release-run-admission-startup-smoke/daily_research_service_release_run_admission_startup_smoke_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-audit
+```
+
+The output is
+`daily_research_service_release_run_admission_startup_smoke_audit_report.json`.
+Valid ready receipts return `0` with `audit_ready=true`; internally consistent
+blocked or failed receipts return `1` with `audit_ready=true` and
+`run_ready=false`; missing, tampered, malformed, out-of-root, or inconsistent
+evidence returns `1` with `status=invalid` and `audit_ready=false`. Configuration
+errors return `2`. The audit is read-only, deterministic, relative-path-only,
+and always keeps `decision_ready=false`.

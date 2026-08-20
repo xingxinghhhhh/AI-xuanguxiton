@@ -339,3 +339,23 @@ blocked or invalid evidence and runtime failures return `1`, while invalid
 timeouts or artifact-root/output configuration return `2`. The smoke run is
 manual and one-shot: it does not refresh data, call external APIs, schedule
 work, expose a public listener, or set `decision_ready=true`.
+
+## Node77 independent startup smoke audit
+
+Node77 audits a Node76 smoke receipt offline and without starting the service:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission-startup-smoke \
+  --smoke-report reports/daily-service-release-run-admission-startup-smoke/daily_research_service_release_run_admission_startup_smoke_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-audit
+```
+
+The audit independently recomputes the smoke report self-hash, declared input
+paths and SHA-256 values, fixed filenames, and the Node75 preflight/startup
+chain. It performs no subprocess, socket, HTTP, network, API-key, or port
+operation and does not claim to prove historical process or port-release facts.
+Ready evidence returns `0`; consistent blocked/failed evidence returns `1` but
+may still have `audit_ready=true`; invalid or tampered evidence returns `1`
+with `audit_ready=false`; configuration errors return `2`. The generated audit
+receipt is deterministic, relative-path-only, and keeps `decision_ready=false`.
