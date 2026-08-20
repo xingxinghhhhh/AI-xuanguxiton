@@ -235,7 +235,13 @@ def test_probe_failure_after_ready_start_is_auditable(
     payload.update(
         {
             "probe_status": probe_status,
-            "probe_exit_code": 1 if probe_status != "timeout" else None,
+            "probe_exit_code": (
+                None
+                if probe_status == "timeout"
+                else 0
+                if probe_status == "service_exited"
+                else 1
+            ),
             "status": "failed",
             "run_ready": False,
             "issues": [{"code": "PROBE_FAILED", "message": "probe did not complete"}],
@@ -252,6 +258,71 @@ def test_probe_failure_after_ready_start_is_auditable(
     assert report["audit_ready"] is True
     assert report["run_ready"] is False
     assert report["decision_ready"] is False
+
+
+@pytest.mark.parametrize(
+    ("probe_status", "probe_exit_code", "stop_status", "service_stopped"),
+    [
+        ("timeout", 1, "controlled", True),
+        ("service_exited", 1, "controlled", True),
+        ("failed", None, "failed", True),
+        ("failed", None, "controlled", False),
+    ],
+)
+def test_invalid_probe_failure_state_is_rejected(
+    tmp_path: Path,
+    probe_status: str,
+    probe_exit_code: int | None,
+    stop_status: str,
+    service_stopped: bool,
+) -> None:
+    paths = _prepare_startup(tmp_path / f"{probe_status}-{stop_status}")
+    smoke_dir = paths["root"] / "smoke"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = (
+        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    payload = json.loads(smoke_path.read_text(encoding="utf-8"))
+    payload.update(
+        {
+            "probe_status": probe_status,
+            "probe_exit_code": probe_exit_code,
+            "stop_status": stop_status,
+            "service_stopped": service_stopped,
+            "status": "failed",
+            "run_ready": False,
+            "issues": [{"code": "PROBE_FAILED", "message": "invalid probe state"}],
+        }
+    )
+    _refresh_compact_hash(smoke_path, payload)
+    report, code = audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "smoke-audit",
+    )
+    assert code == 1
+    assert report["status"] == "invalid"
+    assert report["audit_ready"] is False
+
+
+def test_array_enum_is_rejected_without_type_error(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "array-enum")
+    smoke_dir = paths["root"] / "smoke"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = (
+        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    payload = json.loads(smoke_path.read_text(encoding="utf-8"))
+    payload["status"] = []
+    _refresh_compact_hash(smoke_path, payload)
+    report, code = audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "smoke-audit",
+    )
+    assert code == 1
+    assert report["status"] == "invalid"
+    assert report["audit_ready"] is False
 
 
 @pytest.mark.parametrize(

@@ -169,6 +169,12 @@ def _issue(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
 
 
+def _enum(value: Any, allowed: set[str], *, label: str) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise _AuditFailure("FIELD_MISMATCH", f"{label} is invalid")
+    return value
+
+
 def _relative(value: Any, *, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise _AuditFailure("PATH_INVALID", f"{label} is invalid")
@@ -258,8 +264,8 @@ def _validate_common_receipt(
     for field in booleans:
         if not isinstance(payload[field], bool):
             raise _AuditFailure("FIELD_MISMATCH", f"{label}.{field} is invalid")
-    if "status" in payload and payload["status"] not in statuses:
-        raise _AuditFailure("FIELD_MISMATCH", f"{label}.status is invalid")
+    if "status" in payload:
+        _enum(payload["status"], statuses, label=f"{label}.status")
     if "issues" in payload:
         _issues(payload["issues"], label=f"{label}.issues")
 
@@ -391,6 +397,11 @@ def _validate_upstream_inputs(
         and admission_issues
     ):
         raise _AuditFailure("STATE_MISMATCH", "invalid admission state is inconsistent")
+    if (
+        admission["status"] != smoke["admission_status"]
+        or admission_audit["status"] != smoke["audit_status"]
+    ):
+        raise _AuditFailure("STATE_MISMATCH", "upstream and smoke admission status differs")
 
     release_keys = {"release_manifest", "release_report", "release_audit"}
     if missing:
@@ -475,6 +486,8 @@ def _validate_upstream_inputs(
         and release_issues
     ):
         raise _AuditFailure("STATE_MISMATCH", "invalid release state is inconsistent")
+    if admission["status"] == "ready" and release_manifest["status"] != "ready":
+        raise _AuditFailure("STATE_MISMATCH", "ready admission has non-ready release state")
 
     return (
         admission,
@@ -530,8 +543,7 @@ def _validate_node75_report(
         if not isinstance(payload[field], bool):
             raise _AuditFailure("FIELD_MISMATCH", f"Node75 {field} is invalid")
     for field in ("status", "admission_status", "audit_status", "startup_status"):
-        if payload[field] not in {"ready", "blocked", "failed", "invalid"}:
-            raise _AuditFailure("FIELD_MISMATCH", f"Node75 {field} is invalid")
+        _enum(payload[field], {"ready", "blocked", "failed", "invalid"}, label=f"Node75 {field}")
     issues = _issues(payload["issues"], label="Node75 issues")
     if payload["status"] == "ready":
         if not (
@@ -552,6 +564,10 @@ def _validate_node75_report(
         and payload["startup_status"] == payload["status"]
     ):
         raise _AuditFailure("STATE_MISMATCH", "non-ready Node75 report is inconsistent")
+    for key in _INPUTS:
+        path_field, sha_field, _ = _INPUTS[key]
+        if payload[path_field] != inputs[path_field] or payload[sha_field] != inputs[sha_field]:
+            raise _AuditFailure("CHAIN_MISMATCH", f"Node75 {key} input differs")
     for key in _INPUTS:
         smoke_path_field, smoke_sha_field, _ = _INPUTS[key]
         value = {
@@ -581,24 +597,18 @@ def _validate_smoke(
     ):
         if not isinstance(payload[field], bool):
             raise _AuditFailure("FIELD_MISMATCH", f"smoke {field} is invalid")
-    for field in ("status", "startup_status"):
-        if payload[field] not in {"ready", "blocked", "failed", "invalid"}:
-            raise _AuditFailure("FIELD_MISMATCH", f"smoke {field} is invalid")
-    if payload["probe_status"] not in {
-        "not_started",
-        "ready",
-        "failed",
-        "timeout",
-        "service_exited",
-    }:
-        raise _AuditFailure("FIELD_MISMATCH", "smoke probe_status is invalid")
-    if payload["stop_status"] not in {
-        "not_attempted",
-        "controlled",
-        "uncontrolled_exit",
-        "failed",
-    }:
-        raise _AuditFailure("FIELD_MISMATCH", "smoke stop_status is invalid")
+    for field in ("status", "startup_status", "admission_status", "audit_status"):
+        _enum(payload[field], {"ready", "blocked", "failed", "invalid"}, label=f"smoke {field}")
+    _enum(
+        payload["probe_status"],
+        {"not_started", "ready", "failed", "timeout", "service_exited"},
+        label="smoke probe_status",
+    )
+    _enum(
+        payload["stop_status"],
+        {"not_attempted", "controlled", "uncontrolled_exit", "failed"},
+        label="smoke stop_status",
+    )
     if payload["probe_exit_code"] is not None and (
         isinstance(payload["probe_exit_code"], bool)
         or not isinstance(payload["probe_exit_code"], int)
@@ -649,7 +659,33 @@ def _validate_smoke(
             and payload["startup_ready"] is True
             and payload["service_started"] is True
             and payload["probe_status"] in {"failed", "timeout", "service_exited"}
-            and payload["stop_status"] in {"controlled", "uncontrolled_exit", "failed"}
+            and (
+                (
+                    payload["probe_status"] == "timeout"
+                    and payload["probe_exit_code"] is None
+                )
+                or (
+                    payload["probe_status"] == "failed"
+                    and (
+                        payload["probe_exit_code"] is None
+                        or payload["probe_exit_code"] > 0
+                    )
+                )
+                or (
+                    payload["probe_status"] == "service_exited"
+                    and payload["probe_exit_code"] in {None, 0}
+                )
+            )
+            and (
+                (
+                    payload["stop_status"] == "controlled"
+                    and payload["service_stopped"] is True
+                )
+                or (
+                    payload["stop_status"] in {"uncontrolled_exit", "failed"}
+                    and payload["service_stopped"] is False
+                )
+            )
         )
         if not ((admission_failure or probe_failure) and payload["run_ready"] is False and issues):
             raise _AuditFailure("STATE_MISMATCH", "failed smoke report is inconsistent")
@@ -715,9 +751,9 @@ def _validate_smoke(
                 raise _AuditFailure("CHAIN_MISMATCH", "preflight and startup identity differs")
     elif payload["status"] == "ready" or payload["startup_ready"] is True:
         raise _AuditFailure("INPUT_UNAVAILABLE", "ready smoke report lacks startup report")
-        for field in (*_CHAIN_FIELDS, "admission_status", "audit_status"):
-            if preflight[field] != payload[field]:
-                raise _AuditFailure("CHAIN_MISMATCH", f"smoke and preflight {field} differs")
+    for field in (*_CHAIN_FIELDS, "admission_status", "audit_status"):
+        if preflight[field] != payload[field]:
+            raise _AuditFailure("CHAIN_MISMATCH", f"smoke and preflight {field} differs")
     if payload["status"] == "ready" and startup is None:
         raise _AuditFailure("INPUT_UNAVAILABLE", "ready smoke report lacks startup report")
     return dict(payload), preflight, startup, input_files
