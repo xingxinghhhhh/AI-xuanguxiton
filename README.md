@@ -1711,3 +1711,33 @@ blocked, failed, invalid, tampered, or out-of-root chain fails closed with exit
 `1`; incomplete or conflicting CLI configuration returns `2`. Node80 does not
 refresh data, call AI or external APIs, authorize trading, or set
 `decision_ready=true`.
+
+## Node83 read-only receipt deployment readiness
+
+Node83 performs a platform-neutral, operator-triggered pre-deployment check
+without starting the service:
+
+```bash
+python -m a_share_ai.cli check-read-only-receipt-deployment \
+  --spec reports/read-only-receipt-deployment-spec.json \
+  --artifact-root reports \
+  --output-dir reports/read-only-receipt-deployment-readiness
+```
+
+It validates the deployment spec, the Node81 smoke receipt, and the Node82
+independent audit receipt, including relative paths, actual SHA-256 values,
+self-hashes, versions, status consistency, and `decision_ready=false`. Node81
+and Node82 do not contain host/port fields, so the configured loopback host and
+port are deployment-spec-only values; the check performs one bind-and-close
+test and documents that this is only an instantaneous availability observation.
+It never starts `serve-research-receipt`, calls HTTP, starts subprocesses,
+refreshes data, calls AI/external APIs, exposes a public listener, or authorizes
+trading.
+
+The report is
+`read_only_receipt_service_deployment_readiness_report.json`. Ready evidence
+returns exit `0`; legal blocked/failed upstream evidence or an occupied port
+returns exit `1` with `deployment_status=blocked`; malformed, tampered,
+out-of-root, or inconsistent evidence returns `1` with `deployment_status=invalid`;
+configuration errors return `2`. The report is deterministic, relative-path
+only, self-hashed, and always keeps `decision_ready=false`.

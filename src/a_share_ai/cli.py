@@ -211,6 +211,10 @@ from .service.launch_config import (
     launch_check_report,
     serve_read_only_receipt_launch,
 )
+from .service.read_only_receipt_deployment_readiness import (
+    ReadOnlyReceiptDeploymentReadinessError,
+    check_read_only_receipt_deployment,
+)
 from .service.read_only_receipt_probe import (
     DEFAULT_PROBE_TIMEOUT_SECONDS,
     ReadOnlyReceiptProbeError,
@@ -1100,6 +1104,14 @@ def _build_parser() -> argparse.ArgumentParser:
     daily_service_release_run_admission_startup_gate_smoke_audit.add_argument(
         "--output-dir", type=Path, required=True
     )
+
+    read_only_receipt_deployment = subparsers.add_parser(
+        "check-read-only-receipt-deployment",
+        help="check a read-only receipt deployment specification without starting a service",
+    )
+    read_only_receipt_deployment.add_argument("--spec", type=Path, required=True)
+    read_only_receipt_deployment.add_argument("--artifact-root", type=Path, required=True)
+    read_only_receipt_deployment.add_argument("--output-dir", type=Path, required=True)
 
     daily_service_release_run_admission_startup_smoke_admission = subparsers.add_parser(
         "build-daily-research-service-release-run-admission-startup-smoke-admission",
@@ -2824,6 +2836,20 @@ def audit_daily_research_service_release_run_admission_startup_gate_smoke_comman
     return exit_code
 
 
+def check_read_only_receipt_deployment_command(args: argparse.Namespace) -> int:
+    try:
+        report, exit_code = check_read_only_receipt_deployment(
+            spec_path=args.spec,
+            artifact_root=args.artifact_root,
+            output_dir=args.output_dir,
+        )
+    except ReadOnlyReceiptDeploymentReadinessError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2 if exc.configuration else 1
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def audit_daily_research_service_release_run_admission_startup_smoke_command(
     args: argparse.Namespace,
 ) -> int:
@@ -3157,6 +3183,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_release_run_admission_startup_gate_smoke_command(args)
     if args.command == "audit-daily-research-service-release-run-admission-startup-gate-smoke":
         return audit_daily_research_service_release_run_admission_startup_gate_smoke_command(args)
+    if args.command == "check-read-only-receipt-deployment":
+        return check_read_only_receipt_deployment_command(args)
     if args.command == "audit-daily-research-service-release-run-admission-startup-smoke":
         return audit_daily_research_service_release_run_admission_startup_smoke_command(args)
     if args.command == "build-daily-research-service-release-run-admission-startup-smoke-admission":

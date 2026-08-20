@@ -479,3 +479,29 @@ or modify inputs. Ready returns `0`; legal non-ready evidence returns `1` with
 `audit_ready=true`; invalid/tampered evidence returns `1` with
 `audit_ready=false`; configuration errors return `2`. The output is a single
 self-hashed, relative-path-only receipt with `decision_ready=false`.
+
+## Node83 deployment readiness check
+
+Before a manual loopback launch, run the Node83 check against a deployment spec
+and the latest Node81/Node82 receipts:
+
+```bash
+python -m a_share_ai.cli check-read-only-receipt-deployment \
+  --spec reports/read-only-receipt-deployment-spec.json \
+  --artifact-root reports \
+  --output-dir reports/read-only-receipt-deployment-readiness
+```
+
+The check validates receipt paths, actual hashes, self-hashes, versions,
+identity/status consistency, and `decision_ready=false`. It also binds and
+closes the configured `127.0.0.1` or `::1` port once. Node81 and Node82 receipts
+do not contain host/port, so the host and port are explicitly deployment-spec-only;
+port availability is only true at the instant of this check and is subject to a
+race before launch.
+
+`deployment_status=ready` with exit `0` means the evidence and instantaneous
+loopback check passed. `blocked` or `invalid` returns exit `1`; configuration
+errors return exit `2`. A ready result is not a production-ready or
+decision-ready authorization. If a launch must be reverted, manually restore
+the previous validated deployment spec or Git revision; Node83 never performs
+automatic rollback.

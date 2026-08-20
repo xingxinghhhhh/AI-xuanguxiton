@@ -142,6 +142,14 @@ from .launch_config import (
     load_read_only_receipt_launch_config,
     serve_read_only_receipt_launch,
 )
+from .read_only_receipt_deployment_readiness import (
+    READ_ONLY_RECEIPT_DEPLOYMENT_ENTRYPOINT,
+    READ_ONLY_RECEIPT_DEPLOYMENT_MODE,
+    READ_ONLY_RECEIPT_DEPLOYMENT_REPORT_NAME,
+    READ_ONLY_RECEIPT_DEPLOYMENT_VERSION,
+    ReadOnlyReceiptDeploymentReadinessError,
+    check_read_only_receipt_deployment,
+)
 from .read_only_receipt_probe import (
     READ_ONLY_RECEIPT_SERVICE_PROBE_VERSION,
     ReadOnlyReceiptProbeError,
@@ -253,6 +261,12 @@ __all__ = [
     "create_read_only_receipt_server",
     "load_daily_research_admission_summary",
     "serve_read_only_receipt",
+    "READ_ONLY_RECEIPT_DEPLOYMENT_ENTRYPOINT",
+    "READ_ONLY_RECEIPT_DEPLOYMENT_MODE",
+    "READ_ONLY_RECEIPT_DEPLOYMENT_REPORT_NAME",
+    "READ_ONLY_RECEIPT_DEPLOYMENT_VERSION",
+    "ReadOnlyReceiptDeploymentReadinessError",
+    "check_read_only_receipt_deployment",
     "READ_ONLY_RECEIPT_SERVICE_PROBE_VERSION",
     "ReadOnlyReceiptProbeError",
     "probe_exit_code",
