@@ -284,6 +284,15 @@ def _validate_state(payload: Mapping[str, Any]) -> None:
             and payload["service_stopped"] is False
             and payload["port_released"] is False
         )
+        startup_natural_exit = (
+            payload["startup_status"] == "failed"
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "uncontrolled_exit"
+            and payload["service_stopped"] is False
+            and payload["port_released"] in {True, False}
+        )
         probe_failure = (
             payload["startup_status"] == "ready"
             and payload["service_started"] is True
@@ -335,7 +344,13 @@ def _validate_state(payload: Mapping[str, Any]) -> None:
             and payload["gate_ready"] is True
             and payload["smoke_status"] == "failed"
             and payload["smoke_ready"] is False
-            and (startup_failure or probe_failure or stop_failure or port_failure)
+            and (
+                startup_failure
+                or startup_natural_exit
+                or probe_failure
+                or stop_failure
+                or port_failure
+            )
         )
         valid = bool(issues) and (gate_failure or runtime_failure)
     else:

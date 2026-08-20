@@ -132,6 +132,33 @@ def test_input_sha_tamper_is_invalid_after_smoke_self_hash_refresh(tmp_path: Pat
     assert result["audit_ready"] is False
 
 
+def test_startup_natural_exit_is_auditable_failed_evidence(tmp_path: Path) -> None:
+    paths = _prepare_gate(tmp_path)
+    smoke_dir = paths["root"] / "node81"
+    _run_node81(paths, smoke_dir)
+    smoke_path = _smoke_path(smoke_dir)
+    payload = json.loads(smoke_path.read_text(encoding="utf-8"))
+    payload.update(
+        {
+            "startup_status": "failed",
+            "service_started": False,
+            "probe_status": "not_started",
+            "probe_exit_code": None,
+            "stop_status": "uncontrolled_exit",
+            "service_stopped": False,
+            "port_released": True,
+            "smoke_status": "failed",
+            "smoke_ready": False,
+            "issues": [{"code": "SERVICE_EXITED", "message": "service exited"}],
+        }
+    )
+    _refresh(smoke_path, payload)
+    result, code = _audit(paths, smoke_path, paths["root"] / "audit")
+    assert code == 1
+    assert result["status"] == "failed"
+    assert result["audit_ready"] is True
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [("decision_ready", True), ("probe_exit_code", []), ("issues", {})],
