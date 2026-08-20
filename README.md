@@ -1619,6 +1619,25 @@ does not rerun the smoke or audit, start a process, open a socket, call HTTP,
 refresh data, call AI or external APIs, authorize trading, or set
 `decision_ready=true`.
 
+## Node82 startup-gate smoke receipt audit
+
+Node82 independently audits a Node81 smoke receipt without starting a service:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission-startup-gate-smoke \
+  --smoke-report reports/node81-smoke/daily_research_service_release_run_admission_startup_gate_smoke_report.json \
+  --artifact-root reports --output-dir reports/node82-smoke-audit
+```
+
+It verifies the Node81 exact schema, self-hash, status machine, identity/time
+fields, and the six declared Node78/79/70 files with fixed filenames, relative
+paths, and actual SHA-256 values. It never starts a process, opens a socket,
+calls the probe or loader, accesses HTTP/network/API services, or modifies the
+inputs. Ready evidence returns `0`; legal blocked/failed evidence returns `1`
+with `audit_ready=true`; invalid or tampered evidence returns `1` with
+`audit_ready=false`; configuration errors return `2`. The audit receipt is
+deterministic, path-redacted, and keeps `decision_ready=false`.
+
 ## Node81 Node80 startup gate E2E smoke
 
 Node81 performs one explicit, operator-triggered smoke run through the Node80

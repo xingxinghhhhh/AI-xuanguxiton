@@ -169,7 +169,9 @@ def test_cli_rejects_output_escape(tmp_path: Path) -> None:
     assert main(_args(paths, tmp_path / "outside")) == 2
 
 
-def test_cli_dispatches_ready_smoke_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_dispatches_ready_smoke_command(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     paths = _prepare_gate(tmp_path)
     fake_report = {"smoke_status": "ready", "smoke_ready": True, "decision_ready": False}
     with patch(

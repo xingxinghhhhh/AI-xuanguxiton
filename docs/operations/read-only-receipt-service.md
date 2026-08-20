@@ -459,3 +459,23 @@ and always keeps `decision_ready=false`. Blocked/invalid gate inputs fail before
 process creation; startup, probe, stop, and port-release failures return `1`;
 invalid timeout or output configuration returns `2`. The node adds no route,
 daemon, scheduler, external network, AI/API, data refresh, or trading behavior.
+
+## Node82 startup-gate smoke receipt audit
+
+Run the independent audit against a Node81 receipt:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission-startup-gate-smoke \
+  --smoke-report reports/node81-smoke/daily_research_service_release_run_admission_startup_gate_smoke_report.json \
+  --artifact-root reports --output-dir reports/node82-smoke-audit
+```
+
+Node82 reads only the Node81 receipt and its six declared artifact files. It
+checks exact fields, version, self-hash, normalized relative paths, fixed
+filenames, actual SHA-256 bindings, identity/time ordering, and the independent
+ready/blocked/failed/invalid state machine. It does not start a process, open a
+socket, run Node60 probe, call Node70 loader, perform HTTP/network/API access,
+or modify inputs. Ready returns `0`; legal non-ready evidence returns `1` with
+`audit_ready=true`; invalid/tampered evidence returns `1` with
+`audit_ready=false`; configuration errors return `2`. The output is a single
+self-hashed, relative-path-only receipt with `decision_ready=false`.
