@@ -74,6 +74,16 @@ def _refresh_compact_hash(path: Path, payload: dict) -> None:
     )
 
 
+def _refresh_pretty_hash(path: Path, payload: dict) -> None:
+    payload["output_sha256"] = None
+    payload["output_sha256"] = sha256_bytes(
+        (json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+    )
+    path.write_bytes(
+        (json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+    )
+
+
 def test_ready_smoke_receipt_is_audited_offline(tmp_path: Path) -> None:
     paths = _prepare_startup(tmp_path / "ready")
     smoke_dir = paths["root"] / "smoke"
@@ -173,6 +183,108 @@ def test_tampered_smoke_chain_is_invalid(tmp_path: Path, mutation: str) -> None:
     assert report["audit_ready"] is False
     assert report["run_ready"] is False
     assert report["decision_ready"] is False
+
+
+def test_status_chain_mismatch_is_invalid(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "status-chain")
+    smoke_dir = paths["root"] / "smoke"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = (
+        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    payload = json.loads(smoke_path.read_text(encoding="utf-8"))
+    payload.update(
+        {
+            "admission_status": "blocked",
+            "audit_status": "blocked",
+            "startup_status": "blocked",
+            "startup_ready": False,
+            "service_started": False,
+            "probe_status": "not_started",
+            "probe_exit_code": None,
+            "stop_status": "not_attempted",
+            "service_stopped": False,
+            "status": "blocked",
+            "run_ready": False,
+            "issues": [{"code": "MUTATED", "message": "status chain was mutated"}],
+        }
+    )
+    _refresh_compact_hash(smoke_path, payload)
+    report, code = audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "smoke-audit",
+    )
+    assert code == 1
+    assert report["status"] == "invalid"
+    assert report["audit_ready"] is False
+    assert report["run_ready"] is False
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "admission",
+        "admission_report",
+        "admission_audit",
+        "release_manifest",
+        "release_report",
+        "release_audit",
+    ],
+)
+def test_each_upstream_receipt_schema_is_audited_independently(
+    tmp_path: Path, target: str
+) -> None:
+    paths = _prepare_startup(tmp_path / target)
+    smoke_dir = paths["root"] / "smoke"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = (
+        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    target_path = {
+        "admission": paths["admission"],
+        "admission_report": paths["admission_report"],
+        "admission_audit": paths["admission_audit"],
+        "release_manifest": paths["manifest"],
+        "release_report": paths["release_report"],
+        "release_audit": paths["release_audit"],
+    }[target]
+    target_payload = json.loads(target_path.read_text(encoding="utf-8"))
+    target_payload["decision_ready"] = True
+    _refresh_pretty_hash(target_path, target_payload)
+    target_sha = sha256_bytes(target_path.read_bytes())
+    sha_field = {
+        "admission": "admission_sha256",
+        "admission_report": "admission_report_sha256",
+        "admission_audit": "admission_audit_sha256",
+        "release_manifest": "release_manifest_sha256",
+        "release_report": "release_report_sha256",
+        "release_audit": "release_audit_sha256",
+    }[target]
+    for report_path in (
+        smoke_dir
+        / "preflight"
+        / "daily_research_service_release_run_admission_startup_report.json",
+        smoke_dir
+        / "startup"
+        / "daily_research_service_release_run_admission_startup_report.json",
+        smoke_path,
+    ):
+        report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+        report_payload[sha_field] = target_sha
+        if report_path == smoke_path:
+            _refresh_compact_hash(report_path, report_payload)
+        else:
+            _refresh_compact_hash(report_path, report_payload)
+    report, code = audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "smoke-audit",
+    )
+    assert code == 1
+    assert report["status"] == "invalid"
+    assert report["audit_ready"] is False
+    assert report["run_ready"] is False
 
 
 def test_audit_cli_returns_two_for_output_escape(tmp_path: Path) -> None:

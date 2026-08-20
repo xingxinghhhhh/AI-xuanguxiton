@@ -10,18 +10,34 @@ from typing import Any
 
 from ..market.replay import sha256_bytes, write_atomic
 from .daily_research_service_release import (
+    _MANIFEST_FIELDS as _RELEASE_MANIFEST_FIELDS,
+)
+from .daily_research_service_release import (
+    _REPORT_FIELDS as _RELEASE_REPORT_FIELDS,
+)
+from .daily_research_service_release import (
     DAILY_RESEARCH_SERVICE_RELEASE_MANIFEST_NAME,
     DAILY_RESEARCH_SERVICE_RELEASE_REPORT_NAME,
     DAILY_RESEARCH_SERVICE_RELEASE_VERSION,
+)
+from .daily_research_service_release_audit import (
+    _AUDIT_OUTPUT_FIELDS as _RELEASE_AUDIT_FIELDS,
 )
 from .daily_research_service_release_audit import (
     DAILY_RESEARCH_SERVICE_RELEASE_AUDIT_REPORT_NAME,
 )
 from .daily_research_service_release_run import DAILY_RESEARCH_SERVICE_RELEASE_RUN_VERSION
 from .daily_research_service_release_run_admission import (
+    _ADMISSION_FIELDS as _ADMISSION_INPUT_FIELDS,
+)
+from .daily_research_service_release_run_admission import (
+    _ADMISSION_REPORT_FIELDS,
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_NAME,
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_REPORT_NAME,
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_VERSION,
+)
+from .daily_research_service_release_run_admission_audit import (
+    _AUDIT_FIELDS as _ADMISSION_AUDIT_FIELDS,
 )
 from .daily_research_service_release_run_admission_audit import (
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_AUDIT_REPORT_NAME,
@@ -106,6 +122,8 @@ _CHAIN_FIELDS = (
     "audit_status",
 )
 _SMOKE_STATUS_FIELDS = (
+    "admission_status",
+    "audit_status",
     "startup_status",
     "startup_ready",
     "service_started",
@@ -141,8 +159,8 @@ def _json_bytes(value: Mapping[str, Any]) -> bytes:
     )
 
 
-def _node75_json_bytes(value: Mapping[str, Any]) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+def _pretty_json_bytes(value: Mapping[str, Any]) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(
         "utf-8"
     )
 
@@ -209,12 +227,263 @@ def _read_object(raw: bytes, *, label: str) -> dict[str, Any]:
     return payload
 
 
-def _self_hash(payload: Mapping[str, Any], *, label: str) -> None:
+def _self_hash(
+    payload: Mapping[str, Any], *, label: str, canonical_bytes: Any = _json_bytes
+) -> None:
     declared = _sha(payload.get("output_sha256"), label=f"{label}.output_sha256")
     canonical = dict(payload)
     canonical["output_sha256"] = None
-    if declared != sha256_bytes(_json_bytes(canonical)):
+    if declared != sha256_bytes(canonical_bytes(canonical)):
         raise _AuditFailure("SELF_HASH_MISMATCH", f"{label} self-hash differs")
+
+
+def _validate_common_receipt(
+    payload: Mapping[str, Any],
+    *,
+    fields: set[str],
+    label: str,
+    version_field: str,
+    version: str,
+    canonical_bytes: Any,
+    statuses: set[str],
+    booleans: tuple[str, ...],
+) -> None:
+    if set(payload) != fields:
+        raise _AuditFailure("SCHEMA_INVALID", f"{label} fields are invalid")
+    _self_hash(payload, label=label, canonical_bytes=canonical_bytes)
+    if payload[version_field] != version:
+        raise _AuditFailure("VERSION_MISMATCH", f"{label} version is invalid")
+    if payload.get("decision_ready") is not False:
+        raise _AuditFailure("DECISION_GATE_INVALID", f"{label} decision gate is invalid")
+    for field in booleans:
+        if not isinstance(payload[field], bool):
+            raise _AuditFailure("FIELD_MISMATCH", f"{label}.{field} is invalid")
+    if "status" in payload and payload["status"] not in statuses:
+        raise _AuditFailure("FIELD_MISMATCH", f"{label}.status is invalid")
+    if "issues" in payload:
+        _issues(payload["issues"], label=f"{label}.issues")
+
+
+def _validate_upstream_inputs(
+    input_files: Mapping[str, tuple[Path, str, bytes, str]],
+    *,
+    smoke: Mapping[str, Any],
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
+    """Independently validate every available Node73/74/68 input receipt."""
+
+    missing = [key for key in _INPUTS if key not in input_files]
+    if any(key not in input_files for key in ("admission", "admission_report", "admission_audit")):
+        raise _AuditFailure("INPUT_UNAVAILABLE", "admission inputs are incomplete")
+
+    values: dict[str, dict[str, Any]] = {}
+    for key, (_, _, raw, _) in input_files.items():
+        values[key] = _read_object(raw, label=key)
+
+    admission = values["admission"]
+    admission_report = values["admission_report"]
+    admission_audit = values["admission_audit"]
+
+    _validate_common_receipt(
+        admission,
+        fields=_ADMISSION_INPUT_FIELDS,
+        label="admission",
+        version_field="admission_version",
+        version=DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_VERSION,
+        canonical_bytes=_pretty_json_bytes,
+        statuses={"ready", "blocked", "failed", "invalid"},
+        booleans=(
+            "startup_ready",
+            "service_stopped",
+            "run_ready",
+            "audit_ready",
+            "admission_ready",
+        ),
+    )
+    _validate_common_receipt(
+        admission_report,
+        fields=_ADMISSION_REPORT_FIELDS,
+        label="admission report",
+        version_field="admission_version",
+        version=DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_VERSION,
+        canonical_bytes=_pretty_json_bytes,
+        statuses={"ready", "blocked", "failed", "invalid"},
+        booleans=(
+            "startup_ready",
+            "service_stopped",
+            "run_ready",
+            "audit_ready",
+            "admission_ready",
+        ),
+    )
+    _validate_common_receipt(
+        admission_audit,
+        fields=_ADMISSION_AUDIT_FIELDS,
+        label="admission audit",
+        version_field="audit_version",
+        version=DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_AUDIT_VERSION,
+        canonical_bytes=_pretty_json_bytes,
+        statuses={"ready", "blocked", "failed", "invalid"},
+        booleans=(
+            "startup_ready",
+            "service_stopped",
+            "run_ready",
+            "audit_ready",
+            "admission_ready",
+        ),
+    )
+
+    for field in _ADMISSION_INPUT_FIELDS - {"output_sha256"}:
+        if admission_report[field] != admission[field]:
+            raise _AuditFailure("STATE_MISMATCH", f"admission report {field} differs")
+    for field in _ADMISSION_INPUT_FIELDS - {"output_sha256", "audit_version"}:
+        if admission_audit[field] != admission[field]:
+            raise _AuditFailure("STATE_MISMATCH", f"admission audit {field} differs")
+    admission_file = input_files["admission"]
+    admission_report_file = input_files["admission_report"]
+    if (
+        admission_report["admission_path"] != admission_file[1]
+        or admission_report["admission_sha256"] != admission_file[3]
+        or admission_audit["admission_path"] != admission_file[1]
+        or admission_audit["admission_sha256"] != admission_file[3]
+        or admission_audit["report_path"] != admission_report_file[1]
+        or admission_audit["report_sha256"] != admission_report_file[3]
+    ):
+        raise _AuditFailure("CHAIN_MISMATCH", "admission input references differ")
+    if admission_audit["status"] != admission["status"]:
+        raise _AuditFailure("STATE_MISMATCH", "admission status chain differs")
+
+    admission_status = admission["status"]
+    admission_issues = _issues(admission["issues"], label="admission issues")
+    if admission_status == "ready":
+        if not (
+            admission["startup_status"] == "ready"
+            and admission["startup_ready"] is True
+            and admission["probe_status"] == "ready"
+            and admission["probe_exit_code"] == 0
+            and admission["stop_status"] == "controlled"
+            and admission["service_stopped"] is True
+            and admission["run_status"] == "ready"
+            and admission["run_ready"] is True
+            and admission["audit_ready"] is True
+            and admission["admission_ready"] is True
+            and not admission_issues
+        ):
+            raise _AuditFailure("STATE_MISMATCH", "ready admission state is inconsistent")
+    elif admission_status in {"blocked", "failed"}:
+        if not (
+            admission["audit_ready"] is True
+            and admission["admission_ready"] is False
+            and admission["run_status"] == admission_status
+            and admission_issues
+        ):
+            raise _AuditFailure("STATE_MISMATCH", "non-ready admission state is inconsistent")
+    elif not (
+        admission["audit_ready"] is False
+        and admission["admission_ready"] is False
+        and admission["run_status"] == "invalid"
+        and admission_issues
+    ):
+        raise _AuditFailure("STATE_MISMATCH", "invalid admission state is inconsistent")
+
+    release_keys = {"release_manifest", "release_report", "release_audit"}
+    if missing:
+        if (
+            set(missing) == release_keys
+            and smoke["status"] in {"blocked", "failed"}
+            and admission_status == smoke["status"]
+        ):
+            return admission, admission_report, admission_audit, None, None, None
+        raise _AuditFailure("INPUT_UNAVAILABLE", "upstream inputs are incomplete")
+
+    release_manifest = values["release_manifest"]
+    release_report = values["release_report"]
+    release_audit = values["release_audit"]
+
+    for payload, label in (
+        (release_manifest, "release manifest"),
+        (release_report, "release report"),
+        (release_audit, "release audit"),
+    ):
+        _validate_common_receipt(
+            payload,
+            fields=(
+                _RELEASE_MANIFEST_FIELDS
+                if label == "release manifest"
+                else _RELEASE_REPORT_FIELDS
+                if label == "release report"
+                else _RELEASE_AUDIT_FIELDS
+            ),
+            label=label,
+            version_field="release_version",
+            version=DAILY_RESEARCH_SERVICE_RELEASE_VERSION,
+            canonical_bytes=_pretty_json_bytes,
+            statuses={"ready", "blocked", "failed", "invalid"},
+            booleans=("run_ready", "service_stopped", "audit_ready", "release_ready"),
+        )
+    release_manifest_file = input_files["release_manifest"]
+    release_report_file = input_files["release_report"]
+    if (
+        release_report["manifest_path"] != release_manifest_file[1]
+        or release_report["manifest_sha256"] != release_manifest_file[3]
+        or release_audit["manifest_path"] != release_manifest_file[1]
+        or release_audit["manifest_sha256"] != release_manifest_file[3]
+        or release_audit["report_path"] != release_report_file[1]
+        or release_audit["report_sha256"] != release_report_file[3]
+    ):
+        raise _AuditFailure("CHAIN_MISMATCH", "release input references differ")
+    for field in _RELEASE_MANIFEST_FIELDS - {"output_sha256"}:
+        if release_report[field] != release_manifest[field]:
+            raise _AuditFailure("STATE_MISMATCH", f"release report {field} differs")
+    for field in _RELEASE_MANIFEST_FIELDS - {"output_sha256"}:
+        if release_audit[field] != release_manifest[field]:
+            raise _AuditFailure("STATE_MISMATCH", f"release audit {field} differs")
+    if release_manifest["release_version"] != admission["release_version"]:
+        raise _AuditFailure("VERSION_MISMATCH", "admission and release versions differ")
+    for field in ("symbol", "as_of", "evaluation_at"):
+        if release_manifest[field] != admission[field]:
+            raise _AuditFailure("CHAIN_MISMATCH", f"admission and release {field} differs")
+    release_status = release_manifest["status"]
+    release_issues = _issues(release_manifest["issues"], label="release issues")
+    if release_status == "ready":
+        if not (
+            release_manifest["run_status"] == "ready"
+            and release_manifest["run_ready"] is True
+            and release_manifest["service_stopped"] is True
+            and release_manifest["audit_status"] == "ready"
+            and release_manifest["audit_ready"] is True
+            and release_manifest["release_ready"] is True
+            and not release_issues
+        ):
+            raise _AuditFailure("STATE_MISMATCH", "ready release state is inconsistent")
+    elif release_status in {"blocked", "failed"}:
+        if not (
+            release_manifest["release_ready"] is False
+            and release_manifest["audit_ready"] is True
+            and release_issues
+        ):
+            raise _AuditFailure("STATE_MISMATCH", "non-ready release state is inconsistent")
+    elif not (
+        release_manifest["release_ready"] is False
+        and release_manifest["audit_ready"] is False
+        and release_issues
+    ):
+        raise _AuditFailure("STATE_MISMATCH", "invalid release state is inconsistent")
+
+    return (
+        admission,
+        admission_report,
+        admission_audit,
+        release_manifest,
+        release_report,
+        release_audit,
+    )
 
 
 def _issues(value: Any, *, label: str) -> list[dict[str, str]]:
@@ -350,8 +619,42 @@ def _validate_smoke(
             and not issues
         ):
             raise _AuditFailure("STATE_MISMATCH", "ready smoke report is inconsistent")
-    elif not (payload["run_ready"] is False and issues):
-        raise _AuditFailure("STATE_MISMATCH", "non-ready smoke report is inconsistent")
+    elif payload["status"] == "blocked":
+        if not (
+            payload["admission_status"] == "blocked"
+            and payload["audit_status"] == "blocked"
+            and payload["startup_status"] == "blocked"
+            and payload["startup_ready"] is False
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
+            and payload["run_ready"] is False
+            and issues
+        ):
+            raise _AuditFailure("STATE_MISMATCH", "blocked smoke report is inconsistent")
+    elif payload["status"] == "failed":
+        if not (
+            payload["admission_status"] in {"ready", "failed"}
+            and payload["audit_status"] in {"ready", "failed"}
+            and payload["startup_status"] == "failed"
+            and payload["startup_ready"] is False
+            and payload["service_started"] is False
+            and payload["run_ready"] is False
+            and issues
+        ):
+            raise _AuditFailure("STATE_MISMATCH", "failed smoke report is inconsistent")
+    elif not (
+        payload["admission_status"] in {"invalid", "ready"}
+        and payload["audit_status"] in {"invalid", "ready"}
+        and payload["startup_status"] == "invalid"
+        and payload["startup_ready"] is False
+        and payload["service_started"] is False
+        and payload["run_ready"] is False
+        and issues
+    ):
+        raise _AuditFailure("STATE_MISMATCH", "invalid smoke report is inconsistent")
     input_files: dict[str, tuple[Path, str, bytes, str]] = {}
     for key in _INPUTS:
         item = _declared_file(payload, key=key, root=root, required=payload["status"] == "ready")
@@ -399,14 +702,14 @@ def _validate_smoke(
             root=root,
             inputs=payload,
         )
-        for field in _CHAIN_FIELDS:
+        for field in (*_CHAIN_FIELDS, "admission_status", "audit_status"):
             if startup[field] != preflight[field]:
                 raise _AuditFailure("CHAIN_MISMATCH", "preflight and startup identity differs")
     elif payload["status"] == "ready" or payload["startup_ready"] is True:
         raise _AuditFailure("INPUT_UNAVAILABLE", "ready smoke report lacks startup report")
-    for field in _CHAIN_FIELDS:
-        if preflight[field] != payload[field]:
-            raise _AuditFailure("CHAIN_MISMATCH", f"smoke and preflight {field} differs")
+        for field in (*_CHAIN_FIELDS, "admission_status", "audit_status"):
+            if preflight[field] != payload[field]:
+                raise _AuditFailure("CHAIN_MISMATCH", f"smoke and preflight {field} differs")
     if payload["status"] == "ready" and startup is None:
         raise _AuditFailure("INPUT_UNAVAILABLE", "ready smoke report lacks startup report")
     return dict(payload), preflight, startup, input_files
@@ -521,6 +824,8 @@ def audit_daily_research_service_release_run_admission_startup_smoke(
         smoke, preflight, startup, input_files = _validate_smoke(
             smoke, root=root, smoke_relative=relative
         )
+        upstream = _validate_upstream_inputs(input_files, smoke=smoke)
+        admission, _, admission_audit, _, _, _ = upstream
         report.update(
             {
                 "smoke_version": smoke["run_version"],
@@ -553,10 +858,8 @@ def audit_daily_research_service_release_run_admission_startup_smoke(
             path_field, sha_field, _ = _INPUTS[key]
             report[path_field] = smoke[path_field]
             report[sha_field] = actual_sha
-        admission = _read_object(input_files["admission"][2], label="admission")
-        admission_audit = _read_object(input_files["admission_audit"][2], label="admission audit")
-        report["run_version"] = admission.get("run_version")
-        report["audit_input_version"] = admission_audit.get("audit_version")
+        report["run_version"] = admission["run_version"]
+        report["audit_input_version"] = admission_audit["audit_version"]
         if report["run_version"] != DAILY_RESEARCH_SERVICE_RELEASE_RUN_VERSION:
             raise _AuditFailure("VERSION_MISMATCH", "run version is invalid")
         if (
@@ -564,12 +867,19 @@ def audit_daily_research_service_release_run_admission_startup_smoke(
             != DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_AUDIT_VERSION
         ):
             raise _AuditFailure("VERSION_MISMATCH", "audit input version is invalid")
-        if (
-            startup is not None
-            and startup["status"] != smoke["status"]
-            and smoke["status"] == "ready"
-        ):
-            raise _AuditFailure("STATE_MISMATCH", "startup and smoke status differs")
+        if smoke["status"] == "ready":
+            if startup is None or startup["status"] != "ready":
+                raise _AuditFailure("STATE_MISMATCH", "ready startup and smoke status differs")
+        elif smoke["status"] == "blocked":
+            if preflight["status"] != "blocked" or startup is not None:
+                raise _AuditFailure("STATE_MISMATCH", "blocked startup chain differs")
+        elif smoke["status"] == "failed":
+            if preflight["status"] not in {"ready", "failed"}:
+                raise _AuditFailure("STATE_MISMATCH", "failed preflight chain differs")
+            if startup is not None and startup["status"] != "failed":
+                raise _AuditFailure("STATE_MISMATCH", "failed startup chain differs")
+        elif startup is not None:
+            raise _AuditFailure("STATE_MISMATCH", "invalid startup chain differs")
         report["audit_ready"] = True
         return _finish(
             report,

@@ -1571,8 +1571,9 @@ or calls external APIs, and never authorizes trading.
 ## Node77 independent startup smoke audit
 
 Node77 independently audits a Node76 smoke receipt using only files under the
-artifact root. It rechecks the smoke receipt self-hash, the declared admission
-and release file paths/SHA-256 values, and the Node75 preflight/startup reports;
+artifact root. It rechecks the smoke receipt self-hash, all six referenced
+admission/release receipt schemas, self-hashes, versions, state chains, paths,
+fixed filenames, and SHA-256 values, plus the Node75 preflight/startup reports;
 it does not start a process, open a socket, call HTTP, or claim to prove that a
 historical port was released:
 
@@ -1589,5 +1590,8 @@ Valid ready receipts return `0` with `audit_ready=true`; internally consistent
 blocked or failed receipts return `1` with `audit_ready=true` and
 `run_ready=false`; missing, tampered, malformed, out-of-root, or inconsistent
 evidence returns `1` with `status=invalid` and `audit_ready=false`. Configuration
-errors return `2`. The audit is read-only, deterministic, relative-path-only,
-and always keeps `decision_ready=false`.
+errors return `2`. When Node76 stops at a blocked/failed admission before release
+startup, the three release inputs may be absent; the audit still validates the
+complete available admission chain and does not claim release evidence that is
+not present. The audit is read-only, deterministic, relative-path-only, and
+always keeps `decision_ready=false`.

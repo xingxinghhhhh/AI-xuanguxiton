@@ -11,8 +11,12 @@ prove about a historical process or port.
 
 - Recompute the Node76 smoke report self-hash and actual file SHA-256 values.
 - Validate normalized artifact-root-relative paths and fixed filenames.
+- Independently validate all six admission/release input schemas, self-hashes,
+  versions, decision gates, status/readiness chains, cross-references, and
+  actual SHA-256 values when present.
 - Validate the Node75 check-only and serve report schemas, self-hashes, modes,
-  versions, identities, readiness, status, and input-chain consistency.
+  versions, identities, readiness, status, and input-chain consistency,
+  including explicit ready/blocked/failed smoke-state bindings.
 - Preserve valid ready, blocked, and failed smoke outcomes as auditable states.
 - Keep the audit entirely offline and read-only.
 
@@ -33,12 +37,16 @@ paths, PIDs, commands, logs, credentials, secrets, or environment variables.
 internally consistent. For a valid blocked/failed run, `run_ready` remains
 false and the CLI returns `1`. Only a valid ready receipt returns `0`; invalid
 evidence returns `1` with `audit_ready=false`; configuration errors return
-`2`. The audit does not independently prove historical port release.
+`2`. If Node76 stops at blocked/failed admission before release startup, the
+three release inputs may be absent; the audit validates the complete available
+admission chain without claiming missing release evidence. The audit does not
+independently prove historical port release.
 
 ## Verification
 
-The focused suite covers ready, blocked, failed, and invalid reports; tampered
-and unknown fields; self-hash/path/SHA changes; deterministic output; input
-preservation; CLI configuration handling; and the absence of subprocess,
+The focused suite covers ready, blocked, failed, and invalid reports; explicit
+status-chain mismatches; independent tampering of each of the six upstream
+receipts; unknown fields; self-hash/path/SHA changes; deterministic output;
+input preservation; CLI configuration handling; and the absence of subprocess,
 socket, or HTTP operations. Full repository tests and static/build gates remain
 required before publishing the node.

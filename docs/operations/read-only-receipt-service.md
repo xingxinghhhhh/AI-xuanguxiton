@@ -351,11 +351,15 @@ python -m a_share_ai.cli audit-daily-research-service-release-run-admission-star
   --output-dir reports/daily-service-release-run-admission-startup-smoke-audit
 ```
 
-The audit independently recomputes the smoke report self-hash, declared input
-paths and SHA-256 values, fixed filenames, and the Node75 preflight/startup
-chain. It performs no subprocess, socket, HTTP, network, API-key, or port
+The audit independently recomputes the smoke report self-hash, each available
+admission/release input schema and self-hash, all declared paths and SHA-256
+values, fixed filenames, versions, status chain, and the Node75
+preflight/startup chain. It performs no subprocess, socket, HTTP, network, API-key, or port
 operation and does not claim to prove historical process or port-release facts.
 Ready evidence returns `0`; consistent blocked/failed evidence returns `1` but
 may still have `audit_ready=true`; invalid or tampered evidence returns `1`
 with `audit_ready=false`; configuration errors return `2`. The generated audit
 receipt is deterministic, relative-path-only, and keeps `decision_ready=false`.
+If Node76 stops before release startup because admission is blocked or failed,
+the three release inputs may be absent; the audit preserves that bounded
+evidence state rather than treating absent release evidence as ready.
