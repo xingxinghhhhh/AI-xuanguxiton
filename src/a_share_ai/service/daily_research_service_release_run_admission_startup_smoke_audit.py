@@ -635,15 +635,23 @@ def _validate_smoke(
         ):
             raise _AuditFailure("STATE_MISMATCH", "blocked smoke report is inconsistent")
     elif payload["status"] == "failed":
-        if not (
+        admission_failure = (
             payload["admission_status"] in {"ready", "failed"}
             and payload["audit_status"] in {"ready", "failed"}
             and payload["startup_status"] == "failed"
             and payload["startup_ready"] is False
             and payload["service_started"] is False
-            and payload["run_ready"] is False
-            and issues
-        ):
+        )
+        probe_failure = (
+            payload["admission_status"] == "ready"
+            and payload["audit_status"] == "ready"
+            and payload["startup_status"] == "ready"
+            and payload["startup_ready"] is True
+            and payload["service_started"] is True
+            and payload["probe_status"] in {"failed", "timeout", "service_exited"}
+            and payload["stop_status"] in {"controlled", "uncontrolled_exit", "failed"}
+        )
+        if not ((admission_failure or probe_failure) and payload["run_ready"] is False and issues):
             raise _AuditFailure("STATE_MISMATCH", "failed smoke report is inconsistent")
     elif not (
         payload["admission_status"] in {"invalid", "ready"}
@@ -876,8 +884,12 @@ def audit_daily_research_service_release_run_admission_startup_smoke(
         elif smoke["status"] == "failed":
             if preflight["status"] not in {"ready", "failed"}:
                 raise _AuditFailure("STATE_MISMATCH", "failed preflight chain differs")
-            if startup is not None and startup["status"] != "failed":
-                raise _AuditFailure("STATE_MISMATCH", "failed startup chain differs")
+            if startup is not None:
+                expected_startup_status = (
+                    "ready" if smoke["startup_status"] == "ready" else "failed"
+                )
+                if startup["status"] != expected_startup_status:
+                    raise _AuditFailure("STATE_MISMATCH", "failed startup chain differs")
         elif startup is not None:
             raise _AuditFailure("STATE_MISMATCH", "invalid startup chain differs")
         report["audit_ready"] = True
