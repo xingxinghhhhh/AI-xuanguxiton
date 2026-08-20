@@ -404,6 +404,11 @@ def _validate_upstream_inputs(
         raise _AuditFailure("STATE_MISMATCH", "upstream and smoke admission status differs")
 
     release_keys = {"release_manifest", "release_report", "release_audit"}
+    if admission_status in {"blocked", "failed"} and not missing:
+        raise _AuditFailure(
+            "STATE_MISMATCH",
+            "blocked or failed admission must not carry release inputs",
+        )
     if missing:
         if (
             set(missing) == release_keys

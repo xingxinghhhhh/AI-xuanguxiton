@@ -139,6 +139,52 @@ def test_blocked_or_failed_smoke_receipt_is_auditable_but_not_ready(
     assert report["decision_ready"] is False
 
 
+def test_blocked_admission_with_release_inputs_is_invalid(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "blocked-with-release", blocked=True)
+    smoke_dir = paths["root"] / "smoke"
+    smoke, smoke_code = _run_smoke(paths, smoke_dir)
+    assert smoke_code == 1
+    assert smoke["status"] == "blocked"
+    smoke_path = (
+        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    preflight_path = (
+        smoke_dir
+        / "preflight"
+        / "daily_research_service_release_run_admission_startup_report.json"
+    )
+    release_targets = {
+        "release_manifest": paths["manifest"],
+        "release_report": paths["release_report"],
+        "release_audit": paths["release_audit"],
+    }
+    preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+    smoke_payload = json.loads(smoke_path.read_text(encoding="utf-8"))
+    for key, target_path in release_targets.items():
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text("{}", encoding="utf-8")
+        path_field = f"{key}_path"
+        sha_field = f"{key}_sha256"
+        relative = target_path.relative_to(paths["root"]).as_posix()
+        digest = sha256_bytes(target_path.read_bytes())
+        preflight[path_field] = relative
+        preflight[sha_field] = digest
+        smoke_payload[path_field] = relative
+        smoke_payload[sha_field] = digest
+    _refresh_compact_hash(preflight_path, preflight)
+    smoke_payload["preflight_report_sha256"] = sha256_bytes(preflight_path.read_bytes())
+    _refresh_compact_hash(smoke_path, smoke_payload)
+    report, code = audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "smoke-audit",
+    )
+    assert code == 1
+    assert report["status"] == "invalid"
+    assert report["audit_ready"] is False
+    assert report["run_ready"] is False
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
