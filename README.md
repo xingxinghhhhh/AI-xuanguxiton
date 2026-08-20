@@ -1618,3 +1618,25 @@ inputs are invalid with exit `1`; configuration errors return `2`. Node78
 does not rerun the smoke or audit, start a process, open a socket, call HTTP,
 refresh data, call AI or external APIs, authorize trading, or set
 `decision_ready=true`.
+
+## Node79 startup smoke admission pair audit
+
+Node79 independently audits the Node78 manifest/report pair without reading
+Node76 or Node77 inputs:
+
+```bash
+python -m a_share_ai.cli \
+  audit-daily-research-service-release-run-admission-startup-smoke-admission \
+  --admission reports/daily-service-release-run-admission-startup-smoke-admission/daily_research_service_release_run_admission_startup_smoke_admission.json \
+  --report reports/daily-service-release-run-admission-startup-smoke-admission/daily_research_service_release_run_admission_startup_smoke_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-admission-audit
+```
+
+The audit writes `daily_research_service_release_run_admission_startup_smoke_admission_audit_report.json`.
+It verifies both input self-hashes and actual SHA-256 values, the manifest/report
+binding, relative paths, exact fields, versions, and status semantics. Ready
+evidence returns `0`; consistent blocked or failed evidence returns `1` with
+`audit_ready=true`; invalid or tampered evidence returns `1` with
+`audit_ready=false`; configuration errors return `2`. It is offline,
+deterministic, relative-path-only, and always keeps `decision_ready=false`.

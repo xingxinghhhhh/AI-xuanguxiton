@@ -386,3 +386,24 @@ also returns `1` with `audit_ready=false`; invalid root/output configuration
 returns `2`. This node is offline and read-only: it does not start a process,
 open a socket, call HTTP, refresh data, call AI or external APIs, or authorize
 trading.
+
+## Node79 startup smoke admission pair audit
+
+Node79 independently audits the two Node78 output files:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission-startup-smoke-admission \
+  --admission reports/daily-service-release-run-admission-startup-smoke-admission/daily_research_service_release_run_admission_startup_smoke_admission.json \
+  --report reports/daily-service-release-run-admission-startup-smoke-admission/daily_research_service_release_run_admission_startup_smoke_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-admission-audit
+```
+
+It validates exact schemas, Node78/Node76/Node77 versions, self-hashes,
+actual SHA-256 values, relative path and fixed-filename rules, report-to-
+manifest bindings, and ready/blocked/failed/invalid state semantics. The
+output is deterministic and keeps `decision_ready=false`. Ready evidence
+returns `0`; a consistent non-ready pair returns `1` with `audit_ready=true`;
+invalid or tampered evidence returns `1` with `audit_ready=false`; root/output
+configuration errors return `2`. The audit does not read upstream Node76/77
+files, start a process, open a socket, call HTTP, or access external services.
