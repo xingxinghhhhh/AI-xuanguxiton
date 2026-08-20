@@ -1619,6 +1619,32 @@ does not rerun the smoke or audit, start a process, open a socket, call HTTP,
 refresh data, call AI or external APIs, authorize trading, or set
 `decision_ready=true`.
 
+## Node81 Node80 startup gate E2E smoke
+
+Node81 performs one explicit, operator-triggered smoke run through the Node80
+startup gate:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release-run-admission-startup-gate-smoke \
+  --daily-smoke-admission <node78-manifest> \
+  --daily-smoke-admission-report <node78-report> \
+  --daily-smoke-admission-audit-report <node79-audit-report> \
+  --daily-release-manifest <node70-manifest> \
+  --daily-release-report <node70-report> \
+  --daily-release-audit-report <node70-audit-report> \
+  --artifact-root reports --output-dir reports/node81-smoke
+```
+
+The command starts the existing loopback service through the Node80 parameter
+path, runs the existing Node60 four-route probe, checks that the process remains
+alive, stops it in a controlled way, and verifies the port is released. It
+writes `daily_research_service_release_run_admission_startup_gate_smoke_report.json`
+with relative paths, hashes, status fields, sanitized issues, and
+`decision_ready=false`. Blocked or invalid gates never start a process; startup,
+probe, stop, or port-release failures return `1`. Invalid timeout or output
+configuration returns `2`. No daemon, scheduler, external network, AI call,
+data refresh, or trading action is introduced.
+
 ## Node79 startup smoke admission pair audit
 
 Node79 independently audits the Node78 manifest/report pair without reading

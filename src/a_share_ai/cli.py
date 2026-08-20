@@ -164,6 +164,10 @@ from .service.daily_research_service_release_run_admission_startup_gate import (
     DailyResearchServiceReleaseRunAdmissionStartupGateError,
     check_daily_research_service_release_run_admission_startup_gate,
 )
+from .service.daily_research_service_release_run_admission_startup_gate_smoke import (
+    DailyResearchServiceReleaseRunAdmissionStartupGateSmokeError,
+    run_daily_research_service_release_run_admission_startup_gate_smoke,
+)
 from .service.daily_research_service_release_run_admission_startup_smoke import (
     DailyResearchServiceReleaseRunAdmissionStartupSmokeError,
     run_daily_research_service_release_run_admission_startup_smoke,
@@ -1039,6 +1043,43 @@ def _build_parser() -> argparse.ArgumentParser:
         "--artifact-root", type=Path, required=True
     )
     daily_service_release_run_admission_startup_smoke_audit.add_argument(
+        "--output-dir", type=Path, required=True
+    )
+
+    daily_service_release_run_admission_startup_gate_smoke = subparsers.add_parser(
+        "run-daily-research-service-release-run-admission-startup-gate-smoke",
+        help="run one controlled loopback smoke check through the Node80 startup gate",
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--daily-smoke-admission", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--daily-smoke-admission-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--daily-smoke-admission-audit-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--daily-release-manifest", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--daily-release-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--daily-release-audit-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--artifact-root", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--startup-timeout-seconds", type=float, default=10.0
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
+        "--probe-timeout-seconds",
+        type=float,
+        default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
+    )
+    daily_service_release_run_admission_startup_gate_smoke.add_argument(
         "--output-dir", type=Path, required=True
     )
 
@@ -2726,6 +2767,29 @@ def run_daily_research_service_release_run_admission_startup_smoke_command(
     return exit_code
 
 
+def run_daily_research_service_release_run_admission_startup_gate_smoke_command(
+    args: argparse.Namespace,
+) -> int:
+    try:
+        report, exit_code = run_daily_research_service_release_run_admission_startup_gate_smoke(
+            admission_path=args.daily_smoke_admission,
+            admission_report_path=args.daily_smoke_admission_report,
+            admission_audit_path=args.daily_smoke_admission_audit_report,
+            release_manifest_path=args.daily_release_manifest,
+            release_report_path=args.daily_release_report,
+            release_audit_report_path=args.daily_release_audit_report,
+            artifact_root=args.artifact_root,
+            startup_timeout_seconds=args.startup_timeout_seconds,
+            probe_timeout_seconds=args.probe_timeout_seconds,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceReleaseRunAdmissionStartupGateSmokeError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2 if exc.configuration else 1
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def audit_daily_research_service_release_run_admission_startup_smoke_command(
     args: argparse.Namespace,
 ) -> int:
@@ -3055,6 +3119,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_release_run_admission_audit_command(args)
     if args.command == "run-daily-research-service-release-run-admission-startup-smoke":
         return run_daily_research_service_release_run_admission_startup_smoke_command(args)
+    if args.command == "run-daily-research-service-release-run-admission-startup-gate-smoke":
+        return run_daily_research_service_release_run_admission_startup_gate_smoke_command(args)
     if args.command == "audit-daily-research-service-release-run-admission-startup-smoke":
         return audit_daily_research_service_release_run_admission_startup_smoke_command(args)
     if args.command == "build-daily-research-service-release-run-admission-startup-smoke-admission":

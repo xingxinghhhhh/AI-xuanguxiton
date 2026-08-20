@@ -434,3 +434,28 @@ blocked, failed, invalid, tampered, or path-escaping evidence fails closed with
 exit `1`, while incomplete or conflicting CLI groups return `2`. Every summary
 is deterministic, path-redacted, and keeps `decision_ready=false`; no data
 refresh, AI/API call, external network, or trading action is added.
+
+## Node81 Node80 startup gate E2E smoke
+
+Node81 provides an explicit one-shot operational smoke test for the Node80
+startup path:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release-run-admission-startup-gate-smoke \
+  --daily-smoke-admission <node78-manifest> \
+  --daily-smoke-admission-report <node78-report> \
+  --daily-smoke-admission-audit-report <node79-audit-report> \
+  --daily-release-manifest <node70-manifest> \
+  --daily-release-report <node70-report> \
+  --daily-release-audit-report <node70-audit-report> \
+  --artifact-root reports --output-dir reports/node81-smoke
+```
+
+It reuses the Node80 gate, starts the existing loopback receipt service, runs
+the existing four-route Node60 probe, confirms the process remains alive,
+performs a controlled stop, and checks that the bound port is released. The
+single JSON receipt is relative-path-only, self-hashed, deterministic in shape,
+and always keeps `decision_ready=false`. Blocked/invalid gate inputs fail before
+process creation; startup, probe, stop, and port-release failures return `1`;
+invalid timeout or output configuration returns `2`. The node adds no route,
+daemon, scheduler, external network, AI/API, data refresh, or trading behavior.
