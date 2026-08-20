@@ -326,6 +326,18 @@ def test_bind_failure_writes_failed_report(tmp_path: Path) -> None:
     assert report["status"] == "failed"
     assert report["startup_status"] == "failed"
     assert report["service_started"] is False
+    for key, path_key in (
+        ("release_manifest_path", "manifest"),
+        ("release_report_path", "release_report"),
+        ("release_audit_path", "release_audit"),
+    ):
+        assert report[key] == paths[path_key].relative_to(paths["root"]).as_posix()
+    for key, path_key in (
+        ("release_manifest_sha256", "manifest"),
+        ("release_report_sha256", "release_report"),
+        ("release_audit_sha256", "release_audit"),
+    ):
+        assert report[key] == sha256_bytes(paths[path_key].read_bytes())
     create_server.assert_called_once()
 
 
