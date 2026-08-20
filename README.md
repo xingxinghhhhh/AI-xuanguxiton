@@ -1640,3 +1640,29 @@ evidence returns `0`; consistent blocked or failed evidence returns `1` with
 `audit_ready=true`; invalid or tampered evidence returns `1` with
 `audit_ready=false`; configuration errors return `2`. It is offline,
 deterministic, relative-path-only, and always keeps `decision_ready=false`.
+
+## Node80 startup admission binding gate
+
+Node80 binds the Node78 admission manifest/report and Node79 independent audit
+to the existing Node70 release-startup loader. Use the separate group on the
+existing read-only service command:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --daily-smoke-admission <node78-manifest> \
+  --daily-smoke-admission-report <node78-report> \
+  --daily-smoke-admission-audit-report <node79-audit-report> \
+  --daily-release-manifest <node70-manifest> \
+  --daily-release-report <node70-report> \
+  --daily-release-audit-report <node70-audit-report> \
+  --artifact-root reports --check-only
+```
+
+Check-only mode emits a deterministic, relative-path-only summary and never
+opens a socket. Only a ready Node78/Node79 pair with matching identity,
+timestamps, statuses, paths, hashes, and `decision_ready=false`, followed by a
+successful Node70 startup load, may enter the existing loopback service. A
+blocked, failed, invalid, tampered, or out-of-root chain fails closed with exit
+`1`; incomplete or conflicting CLI configuration returns `2`. Node80 does not
+refresh data, call AI or external APIs, authorize trading, or set
+`decision_ready=true`.

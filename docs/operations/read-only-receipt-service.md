@@ -407,3 +407,30 @@ returns `0`; a consistent non-ready pair returns `1` with `audit_ready=true`;
 invalid or tampered evidence returns `1` with `audit_ready=false`; root/output
 configuration errors return `2`. The audit does not read upstream Node76/77
 files, start a process, open a socket, call HTTP, or access external services.
+
+## Node80 startup admission binding gate
+
+Node80 adds a final read-only binding boundary to `serve-research-receipt`. The
+new group requires the three Node78 admission files, the three Node70 release
+files, and `--artifact-root`:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --daily-smoke-admission <node78-manifest> \
+  --daily-smoke-admission-report <node78-report> \
+  --daily-smoke-admission-audit-report <node79-audit-report> \
+  --daily-release-manifest <node70-manifest> \
+  --daily-release-report <node70-report> \
+  --daily-release-audit-report <node70-audit-report> \
+  --artifact-root reports --check-only
+```
+
+The gate independently checks the Node78/Node79 pair, exact fields, self-hash,
+actual SHA-256, fixed filenames, relative paths, identity, timestamps, status
+and readiness. It then delegates release validation to the existing Node70
+loader; it does not duplicate that contract. Check-only is offline and never
+binds a socket. Only a fully ready chain enters the existing loopback server;
+blocked, failed, invalid, tampered, or path-escaping evidence fails closed with
+exit `1`, while incomplete or conflicting CLI groups return `2`. Every summary
+is deterministic, path-redacted, and keeps `decision_ready=false`; no data
+refresh, AI/API call, external network, or trading action is added.

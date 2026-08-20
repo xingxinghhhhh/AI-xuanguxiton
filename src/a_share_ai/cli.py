@@ -160,6 +160,10 @@ from .service.daily_research_service_release_run_admission_startup import (
     DailyResearchServiceReleaseRunAdmissionStartupError,
     run_daily_research_service_release_run_admission_startup,
 )
+from .service.daily_research_service_release_run_admission_startup_gate import (
+    DailyResearchServiceReleaseRunAdmissionStartupGateError,
+    check_daily_research_service_release_run_admission_startup_gate,
+)
 from .service.daily_research_service_release_run_admission_startup_smoke import (
     DailyResearchServiceReleaseRunAdmissionStartupSmokeError,
     run_daily_research_service_release_run_admission_startup_smoke,
@@ -888,6 +892,9 @@ def _build_parser() -> argparse.ArgumentParser:
     receipt_service.add_argument("--daily-release-manifest", type=Path)
     receipt_service.add_argument("--daily-release-report", type=Path)
     receipt_service.add_argument("--daily-release-audit-report", type=Path)
+    receipt_service.add_argument("--daily-smoke-admission", type=Path)
+    receipt_service.add_argument("--daily-smoke-admission-report", type=Path)
+    receipt_service.add_argument("--daily-smoke-admission-audit-report", type=Path)
     receipt_service.add_argument("--daily-run-admission", type=Path)
     receipt_service.add_argument("--daily-run-admission-report", type=Path)
     receipt_service.add_argument("--daily-run-admission-audit", type=Path)
@@ -2119,6 +2126,88 @@ def run_market_aware_session_history_final_receipt(
 
 
 def run_read_only_receipt_server(args: argparse.Namespace) -> int:
+    smoke_gate_values = (
+        args.daily_smoke_admission,
+        args.daily_smoke_admission_report,
+        args.daily_smoke_admission_audit_report,
+    )
+    if any(value is not None for value in smoke_gate_values):
+        release_values = (
+            args.daily_release_manifest,
+            args.daily_release_report,
+            args.daily_release_audit_report,
+        )
+        if not all(value is not None for value in smoke_gate_values + release_values):
+            print(
+                "CONFIG_INVALID: startup gate options must be provided as a complete set",
+                file=sys.stderr,
+            )
+            return 2
+        if any(
+            value is not None
+            for value in (
+                args.launch_manifest,
+                args.receipt,
+                args.receipt_report,
+                args.daily_admission,
+                args.daily_admission_report,
+                args.daily_admission_root,
+                args.daily_launch_gate,
+                args.daily_launch_gate_root,
+                args.daily_launch_gate_audit,
+                args.daily_run_admission,
+                args.daily_run_admission_report,
+                args.daily_run_admission_audit,
+                args.output_dir,
+                args.host,
+                args.port,
+            )
+        ):
+            print(
+                "CONFIG_INVALID: startup gate cannot be combined with legacy launch options",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            summary, exit_code, startup = (
+                check_daily_research_service_release_run_admission_startup_gate(
+                    admission_path=args.daily_smoke_admission,
+                    admission_report_path=args.daily_smoke_admission_report,
+                    admission_audit_path=args.daily_smoke_admission_audit_report,
+                    release_manifest_path=args.daily_release_manifest,
+                    release_report_path=args.daily_release_report,
+                    release_audit_report_path=args.daily_release_audit_report,
+                    artifact_root=args.artifact_root,
+                )
+            )
+        except DailyResearchServiceReleaseRunAdmissionStartupGateError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 2 if exc.configuration else 1
+        if args.check_only or exit_code != 0:
+            print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+            return exit_code
+        if startup is None:
+            print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+            return 1
+        config = startup.gate_config
+        try:
+            serve_read_only_receipt(
+                receipt_path=config.receipt_path,
+                receipt_report_path=config.receipt_report_path,
+                artifact_root=config.artifact_root,
+                host=config.host,
+                port=config.port,
+                daily_admission_path=config.daily_admission_path,
+                daily_admission_report_path=config.daily_admission_report_path,
+                daily_admission_root=config.artifact_root,
+            )
+        except ReadOnlyReceiptServiceError as exc:
+            print(f"{exc.code}: {exc}", file=sys.stderr)
+            return 1
+        except KeyboardInterrupt:
+            return 0
+        return 0
+
     admission_values = (
         args.daily_run_admission,
         args.daily_run_admission_report,
