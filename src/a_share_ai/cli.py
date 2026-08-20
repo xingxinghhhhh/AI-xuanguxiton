@@ -160,6 +160,10 @@ from .service.daily_research_service_release_run_admission_startup import (
     DailyResearchServiceReleaseRunAdmissionStartupError,
     run_daily_research_service_release_run_admission_startup,
 )
+from .service.daily_research_service_release_run_admission_startup_smoke import (
+    DailyResearchServiceReleaseRunAdmissionStartupSmokeError,
+    run_daily_research_service_release_run_admission_startup_smoke,
+)
 from .service.daily_research_service_release_run_audit import (
     DailyResearchServiceReleaseRunAuditError,
     audit_daily_research_service_release_run,
@@ -967,6 +971,43 @@ def _build_parser() -> argparse.ArgumentParser:
         "--artifact-root", type=Path, required=True
     )
     daily_service_release_run_admission_audit.add_argument("--output-dir", type=Path, required=True)
+
+    daily_service_release_run_admission_startup_smoke = subparsers.add_parser(
+        "run-daily-research-service-release-run-admission-startup-smoke",
+        help="run one controlled loopback smoke check for the audited startup path",
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--daily-run-admission", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--daily-run-admission-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--daily-run-admission-audit", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--daily-release-manifest", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--daily-release-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--daily-release-audit-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--artifact-root", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--startup-timeout-seconds", type=float, default=10.0
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--probe-timeout-seconds",
+        type=float,
+        default=DEFAULT_DAILY_RESEARCH_PROBE_TIMEOUT_SECONDS,
+    )
+    daily_service_release_run_admission_startup_smoke.add_argument(
+        "--output-dir", type=Path, required=True
+    )
 
     daily_service_release = subparsers.add_parser(
         "build-daily-research-service-release",
@@ -2513,6 +2554,29 @@ def run_daily_research_service_release_run_admission_audit_command(
     return 0 if report.get("audit_ready") is True and report.get("status") == "ready" else 1
 
 
+def run_daily_research_service_release_run_admission_startup_smoke_command(
+    args: argparse.Namespace,
+) -> int:
+    try:
+        report, exit_code = run_daily_research_service_release_run_admission_startup_smoke(
+            admission_path=args.daily_run_admission,
+            admission_report_path=args.daily_run_admission_report,
+            admission_audit_path=args.daily_run_admission_audit,
+            release_manifest_path=args.daily_release_manifest,
+            release_report_path=args.daily_release_report,
+            release_audit_path=args.daily_release_audit_report,
+            artifact_root=args.artifact_root,
+            startup_timeout_seconds=args.startup_timeout_seconds,
+            probe_timeout_seconds=args.probe_timeout_seconds,
+            output_dir=args.output_dir,
+        )
+    except DailyResearchServiceReleaseRunAdmissionStartupSmokeError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2 if exc.configuration else 1
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def run_daily_research_service_audit_command(args: argparse.Namespace) -> int:
     try:
         report = audit_daily_research_service_run(
@@ -2786,6 +2850,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_release_run_admission_command(args)
     if args.command == "audit-daily-research-service-release-run-admission":
         return run_daily_research_service_release_run_admission_audit_command(args)
+    if args.command == "run-daily-research-service-release-run-admission-startup-smoke":
+        return run_daily_research_service_release_run_admission_startup_smoke_command(args)
     if args.command == "audit-daily-research-service-run":
         return run_daily_research_service_audit_command(args)
     if args.command == "build-daily-research-service-release":

@@ -66,6 +66,12 @@ from .daily_research_service_release_run_admission_startup import (
     DailyResearchServiceReleaseRunAdmissionStartupError,
     run_daily_research_service_release_run_admission_startup,
 )
+from .daily_research_service_release_run_admission_startup_smoke import (
+    DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_REPORT_NAME,
+    DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_VERSION,
+    DailyResearchServiceReleaseRunAdmissionStartupSmokeError,
+    run_daily_research_service_release_run_admission_startup_smoke,
+)
 from .daily_research_service_release_run_audit import (
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_AUDIT_REPORT_NAME,
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_AUDIT_VERSION,
@@ -164,6 +170,10 @@ __all__ = [
     "DailyResearchServiceReleaseRunAdmissionStartupConfig",
     "DailyResearchServiceReleaseRunAdmissionStartupError",
     "run_daily_research_service_release_run_admission_startup",
+    "DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_REPORT_NAME",
+    "DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_VERSION",
+    "DailyResearchServiceReleaseRunAdmissionStartupSmokeError",
+    "run_daily_research_service_release_run_admission_startup_smoke",
     "DAILY_RESEARCH_SERVICE_LAUNCH_GATE_VERSION",
     "DailyResearchServiceLaunchGateConfig",
     "DailyResearchServiceLaunchGateError",

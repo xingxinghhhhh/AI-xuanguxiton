@@ -310,3 +310,32 @@ all three Node70 release inputs, keeps `decision_ready=false`, and contains no P
 command-line, logs, credentials, or secrets. This node is a startup binding
 check, not a long-term health monitor or a replacement for the Node71/72
 evidence chain.
+
+## Node76 controlled release-run startup smoke
+
+For one bounded deployment-style verification of the complete Node75 path, run
+the Node76 smoke command:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release-run-admission-startup-smoke \
+  --daily-run-admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --daily-run-admission-report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --daily-run-admission-audit reports/daily-service-release-run-admission-audit/daily_research_service_release_run_admission_audit_report.json \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --artifact-root reports \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke
+```
+
+Node76 writes the Node75 check-only report to `preflight/`, the actual startup
+report to `startup/`, and a compact-self-hashed smoke receipt at the output
+root. It then runs the existing Node60 four-route loopback probe, confirms the
+child remains alive, performs the existing controlled stop, and verifies that
+the loopback port is released. Exit `0` requires all of those conditions;
+blocked or invalid evidence and runtime failures return `1`, while invalid
+timeouts or artifact-root/output configuration return `2`. The smoke run is
+manual and one-shot: it does not refresh data, call external APIs, schedule
+work, expose a public listener, or set `decision_ready=true`.

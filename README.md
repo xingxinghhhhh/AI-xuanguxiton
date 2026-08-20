@@ -1535,3 +1535,35 @@ exit `1`; invalid configuration returns `2`. The receipt has only relative
 paths and sanitized issues, always keeps `decision_ready=false`, and does not
 schedule work, refresh data, call AI, expose a public listener, or authorize
 trading.
+
+## Node76 controlled release-run startup smoke
+
+Node76 performs one manual, bounded, loopback-only smoke run over the complete
+Node75 admission/startup path. It first runs the Node75 check-only gate, then
+starts the existing service in a child process, reuses the Node60 four-route
+probe, verifies the process remains alive after probing, and stops it with the
+existing controlled-stop semantics:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release-run-admission-startup-smoke \
+  --daily-run-admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --daily-run-admission-report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --daily-run-admission-audit reports/daily-service-release-run-admission-audit/daily_research_service_release_run_admission_audit_report.json \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --artifact-root reports \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke
+```
+
+The command writes Node75 preflight and startup reports under `preflight/` and
+`startup/`, plus the final
+`daily_research_service_release_run_admission_startup_smoke_report.json`.
+Exit `0` requires a ready preflight, successful four-route probe, a live child
+before stop, controlled stop, and port release. Blocked or invalid evidence,
+startup/probe/cleanup failures, and port conflicts return `1`; invalid timeout,
+root, or output configuration returns `2`. The smoke receipt contains only
+relative paths and hashes, keeps `decision_ready=false`, never refreshes data
+or calls external APIs, and never authorizes trading.
