@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
@@ -39,6 +40,8 @@ DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_GATE_VERSION = (
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _ABSOLUTE_PATH_RE = re.compile(r"(?i)(?:[A-Z]:[\\/]|\\\\|(?:^|\s)/)")
 _STATUS_VALUES = {"ready", "blocked", "failed", "invalid"}
+_PROBE_VALUES = {"not_started", "ready", "failed", "timeout", "service_exited"}
+_STOP_VALUES = {"not_attempted", "controlled", "uncontrolled_exit", "failed"}
 
 
 class DailyResearchServiceReleaseRunAdmissionStartupGateError(ValueError):
@@ -115,6 +118,161 @@ def _self_hash(payload: Mapping[str, Any], *, label: str) -> None:
         raise _GateFailure("SELF_HASH_MISMATCH", f"{label} self-hash differs")
 
 
+def _enum(value: Any, allowed: set[str], *, label: str) -> None:
+    if not isinstance(value, str) or value not in allowed:
+        raise _GateFailure("FIELD_MISMATCH", f"{label} is invalid")
+
+
+def _issues(value: Any, *, label: str) -> None:
+    if not isinstance(value, list) or any(
+        not isinstance(item, dict)
+        or set(item) != {"code", "message"}
+        or not isinstance(item["code"], str)
+        or not isinstance(item["message"], str)
+        for item in value
+    ):
+        raise _GateFailure("FIELD_MISMATCH", f"{label} is invalid")
+
+
+def _validate_runtime_state(payload: Mapping[str, Any], *, label: str) -> None:
+    for field in (
+        "startup_ready",
+        "service_started",
+        "service_stopped",
+        "run_ready",
+        "audit_ready",
+        "admission_ready",
+    ):
+        if not isinstance(payload[field], bool):
+            raise _GateFailure("FIELD_MISMATCH", f"{label}.{field} is invalid")
+    for field in ("status", "startup_status", "smoke_status", "audit_status"):
+        _enum(payload[field], _STATUS_VALUES, label=f"{label}.{field}")
+    _enum(payload["probe_status"], _PROBE_VALUES, label=f"{label}.probe_status")
+    _enum(payload["stop_status"], _STOP_VALUES, label=f"{label}.stop_status")
+    probe_exit_code = payload["probe_exit_code"]
+    if probe_exit_code is not None and (
+        isinstance(probe_exit_code, bool)
+        or not isinstance(probe_exit_code, int)
+        or probe_exit_code < 0
+    ):
+        raise _GateFailure("FIELD_MISMATCH", f"{label}.probe_exit_code is invalid")
+    _issues(payload["issues"], label=f"{label}.issues")
+    if payload["status"] == "ready":
+        valid = (
+            payload["smoke_status"] == "ready"
+            and payload["audit_status"] == "ready"
+            and payload["startup_status"] == "ready"
+            and payload["startup_ready"] is True
+            and payload["service_started"] is True
+            and payload["probe_status"] == "ready"
+            and payload["probe_exit_code"] == 0
+            and payload["stop_status"] == "controlled"
+            and payload["service_stopped"] is True
+            and payload["run_ready"] is True
+            and payload["audit_ready"] is True
+            and payload["admission_ready"] is True
+            and not payload["issues"]
+        )
+    elif payload["status"] == "blocked":
+        valid = (
+            payload["smoke_status"] == "blocked"
+            and payload["audit_status"] == "blocked"
+            and payload["startup_status"] == "blocked"
+            and payload["startup_ready"] is False
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
+            and payload["run_ready"] is False
+            and payload["audit_ready"] is True
+            and payload["admission_ready"] is False
+            and bool(payload["issues"])
+        )
+    elif payload["status"] == "failed":
+        admission_failure = (
+            payload["startup_status"] == "failed"
+            and payload["startup_ready"] is False
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
+        )
+        probe_failure = (
+            payload["startup_status"] == "ready"
+            and payload["startup_ready"] is True
+            and payload["service_started"] is True
+            and payload["probe_status"] in {"failed", "timeout", "service_exited"}
+            and (
+                (payload["probe_status"] == "timeout" and payload["probe_exit_code"] is None)
+                or (
+                    payload["probe_status"] == "failed"
+                    and (
+                        payload["probe_exit_code"] is None or payload["probe_exit_code"] > 0
+                    )
+                )
+                or (
+                    payload["probe_status"] == "service_exited"
+                    and payload["probe_exit_code"] in {None, 0}
+                )
+            )
+            and (
+                (payload["stop_status"] == "controlled" and payload["service_stopped"] is True)
+                or (
+                    payload["stop_status"] in {"uncontrolled_exit", "failed"}
+                    and payload["service_stopped"] is False
+                )
+            )
+        )
+        valid = (
+            payload["smoke_status"] == "failed"
+            and payload["audit_status"] == "failed"
+            and payload["run_ready"] is False
+            and payload["audit_ready"] is True
+            and payload["admission_ready"] is False
+            and bool(payload["issues"])
+            and (admission_failure or probe_failure)
+        )
+    else:
+        valid = (
+            payload["smoke_status"] == "invalid"
+            and payload["audit_status"] == "invalid"
+            and payload["startup_status"] == "invalid"
+            and payload["startup_ready"] is False
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
+            and payload["run_ready"] is False
+            and payload["audit_ready"] is False
+            and payload["admission_ready"] is False
+            and bool(payload["issues"])
+        )
+    if not valid:
+        raise _GateFailure("STATE_MISMATCH", f"{label} runtime state is invalid")
+
+
+def _validate_identity(payload: Mapping[str, Any], *, label: str) -> None:
+    if not isinstance(payload["symbol"], str) or not payload["symbol"].strip():
+        raise _GateFailure("IDENTITY_INVALID", f"{label}.symbol is invalid")
+    parsed_times: dict[str, datetime] = {}
+    for field in ("as_of", "evaluation_at"):
+        value = payload[field]
+        if not isinstance(value, str) or not value.strip():
+            raise _GateFailure("IDENTITY_INVALID", f"{label}.{field} is invalid")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise _GateFailure("IDENTITY_INVALID", f"{label}.{field} is invalid") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise _GateFailure("IDENTITY_INVALID", f"{label}.{field} is invalid")
+        parsed_times[field] = parsed
+    if parsed_times["as_of"] > parsed_times["evaluation_at"]:
+        raise _GateFailure("IDENTITY_INVALID", f"{label} time order is invalid")
+
+
 def _base_summary() -> dict[str, Any]:
     return {
         "startup_gate_version": DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_GATE_VERSION,
@@ -180,6 +338,14 @@ def _validate_inputs(
             raise _GateFailure("DECISION_GATE_INVALID", f"{label} decision gate is invalid")
     if audit["decision_ready"] is not False:
         raise _GateFailure("DECISION_GATE_INVALID", "admission audit decision gate is invalid")
+    _validate_runtime_state(manifest, label="admission manifest")
+    _validate_runtime_state(report, label="admission report")
+    _validate_runtime_state(audit, label="admission audit")
+    if not isinstance(audit["input_audit_ready"], bool):
+        raise _GateFailure("FIELD_MISMATCH", "admission audit.input_audit_ready is invalid")
+    _validate_identity(manifest, label="admission manifest")
+    _validate_identity(report, label="admission report")
+    _validate_identity(audit, label="admission audit")
     if (
         manifest["admission_version"]
         != DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_ADMISSION_VERSION
@@ -220,15 +386,6 @@ def _validate_inputs(
         _relative(manifest[field], label=f"admission manifest.{field}")
     for field in ("smoke_report_sha256", "smoke_audit_report_sha256"):
         _sha(manifest[field], label=f"admission manifest.{field}")
-    for payload, label in ((manifest, "admission manifest"), (audit, "admission audit")):
-        if payload["status"] not in _STATUS_VALUES:
-            raise _GateFailure("FIELD_MISMATCH", f"{label}.status is invalid")
-        if payload["symbol"] is None or not isinstance(payload["symbol"], str):
-            raise _GateFailure("IDENTITY_INVALID", f"{label}.symbol is invalid")
-        if payload["as_of"] is None or not isinstance(payload["as_of"], str):
-            raise _GateFailure("IDENTITY_INVALID", f"{label}.as_of is invalid")
-        if payload["evaluation_at"] is None or not isinstance(payload["evaluation_at"], str):
-            raise _GateFailure("IDENTITY_INVALID", f"{label}.evaluation_at is invalid")
     if (
         manifest["symbol"] != audit["symbol"]
         or manifest["as_of"] != audit["as_of"]

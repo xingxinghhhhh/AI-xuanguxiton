@@ -170,6 +170,63 @@ def test_invalid_gate_does_not_bind_or_load(tmp_path: Path) -> None:
     loader.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("source", "field", "value"),
+    [
+        ("smoke_admission", "status", []),
+        ("smoke_admission", "startup_ready", "true"),
+        ("smoke_admission", "issues", {}),
+        ("smoke_admission_audit", "status", {"status": "ready"}),
+        ("smoke_admission_audit", "audit_ready", 1),
+    ],
+)
+def test_invalid_runtime_types_fail_closed(
+    tmp_path: Path, source: str, field: str, value: object
+) -> None:
+    paths = _prepare_gate(tmp_path)
+    path = paths[source]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload[field] = value
+    _refresh(path, payload)
+    with patch(
+        "a_share_ai.service.daily_research_service_release_run_admission_startup_gate.load_daily_research_service_release_startup"
+    ) as loader:
+        summary, code, startup = _gate(paths)
+    assert code == 1
+    assert startup is None
+    assert summary["status"] == "invalid"
+    loader.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("as_of", "not-a-time"), ("evaluation_at", "2026-01-01T00:00:00")],
+)
+def test_invalid_identity_time_fails_closed(tmp_path: Path, field: str, value: str) -> None:
+    paths = _prepare_gate(tmp_path / field)
+    path = paths["smoke_admission"]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload[field] = value
+    _refresh(path, payload)
+    summary, code, startup = _gate(paths)
+    assert code == 1
+    assert startup is None
+    assert summary["status"] == "invalid"
+
+
+def test_ready_runtime_state_cannot_be_weakened_after_self_hash_refresh(tmp_path: Path) -> None:
+    paths = _prepare_gate(tmp_path / "runtime-state")
+    path = paths["smoke_admission"]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["probe_status"] = "timeout"
+    payload["probe_exit_code"] = None
+    _refresh(path, payload)
+    summary, code, startup = _gate(paths)
+    assert code == 1
+    assert startup is None
+    assert summary["status"] == "invalid"
+
+
 def test_actual_ready_mode_reuses_existing_server_entrypoint(tmp_path: Path) -> None:
     paths = _prepare_gate(tmp_path / "serve")
     with patch("a_share_ai.cli.serve_read_only_receipt") as serve:
