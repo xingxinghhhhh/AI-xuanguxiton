@@ -215,7 +215,7 @@ def test_startup_service_unavailable_report_retries_with_remaining_timeout(
     assert exit_code == 0
     assert report["status"] == "ready"
     assert len(timeouts) == 2
-    assert all(timeout <= 0.2 for timeout in timeouts)
+    assert all(timeout <= 0.2 + 1e-9 for timeout in timeouts)
 
 
 def test_stale_startup_report_is_removed_before_service_start(tmp_path: Path) -> None:

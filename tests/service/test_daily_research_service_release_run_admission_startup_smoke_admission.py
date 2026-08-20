@@ -11,6 +11,7 @@ from a_share_ai.cli import main
 from a_share_ai.market.replay import sha256_bytes
 from a_share_ai.service import (
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_ADMISSION_NAME,
+    DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_ADMISSION_REPORT_NAME,
     build_daily_research_service_release_run_admission_startup_smoke_admission,
 )
 from a_share_ai.service.daily_research_service_release_run_admission_startup_smoke import (
@@ -44,11 +45,11 @@ def _build(paths: dict[str, Path], *, name: str = "admission") -> tuple[dict, di
     smoke_dir = paths["root"] / "smoke"
     audit_dir = paths["root"] / "smoke-audit"
     admission_dir = paths["root"] / name
-    smoke_path = (
-        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    smoke_path = smoke_dir / (
+        "daily_research_service_release_run_admission_startup_smoke_report.json"
     )
-    audit_path = (
-        audit_dir / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
+    audit_path = audit_dir / (
+        DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
     )
     _run_smoke(paths, smoke_dir)
     audit_daily_research_service_release_run_admission_startup_smoke(
@@ -148,16 +149,16 @@ def test_invalid_input_builds_invalid_admission(tmp_path: Path) -> None:
     smoke_dir = paths["root"] / "smoke"
     audit_dir = paths["root"] / "smoke-audit"
     _run_smoke(paths, smoke_dir)
-    smoke_path = (
-        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    smoke_path = smoke_dir / (
+        "daily_research_service_release_run_admission_startup_smoke_report.json"
     )
     audit_daily_research_service_release_run_admission_startup_smoke(
         smoke_report_path=smoke_path,
         artifact_root=paths["root"],
         output_dir=audit_dir,
     )
-    audit_path = (
-        audit_dir / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
+    audit_path = audit_dir / (
+        DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
     )
     payload = json.loads(audit_path.read_text(encoding="utf-8"))
     payload["decision_ready"] = True
@@ -205,3 +206,180 @@ def test_admission_cli_returns_two_for_output_escape(tmp_path: Path) -> None:
         str(tmp_path / "outside"),
     ]
     assert main(args) == 2
+
+
+def test_admission_cli_returns_zero_for_ready_and_preserves_inputs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paths = _prepare_startup(tmp_path / "cli-ready")
+    smoke_dir = paths["root"] / "smoke"
+    audit_dir = paths["root"] / "smoke-audit"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = smoke_dir / (
+        "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=audit_dir,
+    )
+    audit_path = audit_dir / (
+        DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
+    )
+    before = {path: path.read_bytes() for path in (smoke_path, audit_path)}
+    args = [
+        "build-daily-research-service-release-run-admission-startup-smoke-admission",
+        "--smoke-report",
+        str(smoke_path),
+        "--smoke-audit-report",
+        str(audit_path),
+        "--artifact-root",
+        str(paths["root"]),
+        "--output-dir",
+        str(paths["root"] / "admission"),
+    ]
+    assert main(args) == 0
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed["manifest"]["admission_ready"] is True
+    assert {path: path.read_bytes() for path in (smoke_path, audit_path)} == before
+
+
+def test_admission_cli_returns_one_for_invalid_audit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paths = _prepare_startup(tmp_path / "cli-invalid")
+    smoke_dir = paths["root"] / "smoke"
+    audit_dir = paths["root"] / "smoke-audit"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = smoke_dir / (
+        "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=audit_dir,
+    )
+    audit_path = audit_dir / (
+        DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
+    )
+    payload = json.loads(audit_path.read_text(encoding="utf-8"))
+    payload["decision_ready"] = True
+    _refresh_hash(audit_path, payload)
+    args = [
+        "build-daily-research-service-release-run-admission-startup-smoke-admission",
+        "--smoke-report",
+        str(smoke_path),
+        "--smoke-audit-report",
+        str(audit_path),
+        "--artifact-root",
+        str(paths["root"]),
+        "--output-dir",
+        str(paths["root"] / "admission"),
+    ]
+    assert main(args) == 1
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed["manifest"]["status"] == "invalid"
+
+
+def test_admission_outputs_are_deterministic(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "deterministic")
+    smoke_dir = paths["root"] / "smoke"
+    audit_dir = paths["root"] / "smoke-audit"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = smoke_dir / (
+        "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=audit_dir,
+    )
+    audit_path = audit_dir / (
+        DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
+    )
+    first = build_daily_research_service_release_run_admission_startup_smoke_admission(
+        smoke_report_path=smoke_path,
+        smoke_audit_report_path=audit_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "admission",
+    )
+    first_bytes = {
+        name: (paths["root"] / "admission" / name).read_bytes()
+        for name in (
+            DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_ADMISSION_NAME,
+            DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_ADMISSION_REPORT_NAME,
+        )
+    }
+    second = build_daily_research_service_release_run_admission_startup_smoke_admission(
+        smoke_report_path=smoke_path,
+        smoke_audit_report_path=audit_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "admission",
+    )
+    assert first[0] == second[0]
+    second_bytes = {
+        name: (paths["root"] / "admission" / name).read_bytes()
+        for name in (
+            DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_ADMISSION_NAME,
+            DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_ADMISSION_REPORT_NAME,
+        )
+    }
+    assert first_bytes == second_bytes
+
+
+@pytest.mark.parametrize(
+    "mutation", ["unknown", "invalid_type", "absolute_path", "self_hash", "sha", "outside_path"]
+)
+def test_admission_rejects_tampered_or_invalid_receipts(tmp_path: Path, mutation: str) -> None:
+    paths = _prepare_startup(tmp_path / mutation)
+    smoke_dir = paths["root"] / "smoke"
+    audit_dir = paths["root"] / "smoke-audit"
+    _run_smoke(paths, smoke_dir)
+    smoke_path = smoke_dir / (
+        "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=audit_dir,
+    )
+    audit_path = audit_dir / (
+        DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_AUDIT_REPORT_NAME
+    )
+    payload = json.loads(audit_path.read_text(encoding="utf-8"))
+    if mutation == "unknown":
+        payload["unexpected"] = True
+    elif mutation == "invalid_type":
+        payload["audit_ready"] = []
+    elif mutation == "self_hash":
+        payload["status"] = "blocked"
+        audit_path.write_bytes(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        )
+    elif mutation == "sha":
+        payload["smoke_report_sha256"] = "0" * 64
+        _refresh_hash(audit_path, payload)
+    else:
+        payload["smoke_report_path"] = r"C:\\secret.json"
+        _refresh_hash(audit_path, payload)
+    if mutation in {"unknown", "invalid_type"}:
+        _refresh_hash(audit_path, payload)
+    input_smoke_path = (
+        tmp_path
+        / "outside"
+        / "daily_research_service_release_run_admission_startup_smoke_report.json"
+        if mutation == "outside_path"
+        else smoke_path
+    )
+    manifest, report, code = (
+        build_daily_research_service_release_run_admission_startup_smoke_admission(
+            smoke_report_path=input_smoke_path,
+            smoke_audit_report_path=audit_path,
+            artifact_root=paths["root"],
+            output_dir=paths["root"] / "admission",
+        )
+    )
+    assert code == 1
+    assert manifest["status"] == "invalid"
+    assert manifest["audit_ready"] is False
+    assert report["decision_ready"] is False
