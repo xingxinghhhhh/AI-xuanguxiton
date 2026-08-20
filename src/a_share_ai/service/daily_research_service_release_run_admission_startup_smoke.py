@@ -146,7 +146,13 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _validate_node75_report(path: Path, *, expected_mode: str) -> dict[str, Any] | None:
+def _validate_node75_report(
+    path: Path,
+    *,
+    expected_mode: str,
+    expected_inputs: Mapping[str, Path],
+    root: Path,
+) -> dict[str, Any] | None:
     payload = _read_json(path)
     if payload is None or set(payload) != {
         "startup_version",
@@ -187,8 +193,72 @@ def _validate_node75_report(path: Path, *, expected_mode: str) -> dict[str, Any]
     canonical["output_sha256"] = None
     if not isinstance(declared, str) or declared != sha256_bytes(_json_bytes(canonical)):
         return None
+    if payload["startup_version"] != DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_VERSION:
+        return None
     if payload["mode"] != expected_mode or payload["decision_ready"] is not False:
         return None
+    for field in ("admission_ready", "audit_ready", "startup_ready", "service_started"):
+        if not isinstance(payload[field], bool):
+            return None
+    if payload["status"] not in {"ready", "blocked", "failed", "invalid"}:
+        return None
+    if payload["startup_status"] not in {"ready", "blocked", "failed", "invalid"}:
+        return None
+    if payload["admission_status"] not in {"ready", "blocked", "failed", "invalid"}:
+        return None
+    if payload["audit_status"] not in {"ready", "blocked", "failed", "invalid"}:
+        return None
+    issues = payload["issues"]
+    if not isinstance(issues, list) or any(
+        not isinstance(item, Mapping)
+        or set(item) != {"code", "message"}
+        or not isinstance(item["code"], str)
+        or not isinstance(item["message"], str)
+        for item in issues
+    ):
+        return None
+    if payload["status"] == "ready":
+        if (
+            payload["admission_status"] != "ready"
+            or payload["audit_status"] != "ready"
+            or payload["admission_ready"] is not True
+            or payload["audit_ready"] is not True
+            or payload["startup_status"] != "ready"
+            or payload["startup_ready"] is not True
+            or bool(issues)
+        ):
+            return None
+    elif not issues or payload["startup_ready"] is not False:
+        return None
+    if expected_mode == "check_only" and payload["service_started"] is not False:
+        return None
+    if expected_mode == "serve" and payload["status"] == "ready":
+        if payload["service_started"] is not True:
+            return None
+    field_map = {
+        "admission": "admission_path",
+        "admission_report": "admission_report_path",
+        "admission_audit": "admission_audit_path",
+        "release_manifest": "release_manifest_path",
+        "release_report": "release_report_path",
+        "release_audit": "release_audit_path",
+    }
+    for key, path_value in expected_inputs.items():
+        path_field = field_map[key]
+        sha_field = path_field.replace("_path", "_sha256")
+        relative, digest = _safe_meta(path_value, root=root)
+        if payload[path_field] is None and payload[sha_field] is None:
+            continue
+        if relative is None or digest is None:
+            return None
+        if payload[path_field] != relative or payload[sha_field] != digest:
+            return None
+    if expected_mode == "serve" and payload["status"] == "ready":
+        if payload["startup_status"] != "ready" or payload["startup_ready"] is not True:
+            return None
+    if expected_mode == "check_only" and payload["status"] == "ready":
+        if payload["startup_ready"] is not True:
+            return None
     return payload
 
 
@@ -390,7 +460,12 @@ def run_daily_research_service_release_run_admission_startup_smoke(
         report["issues"] = [_issue(exc.code, str(exc))]
         return _finish(report, output_dir=output, status="invalid", code=1)
 
-    preflight = _validate_node75_report(preflight_path, expected_mode="check_only")
+    preflight = _validate_node75_report(
+        preflight_path,
+        expected_mode="check_only",
+        expected_inputs=paths,
+        root=root,
+    )
     if preflight is None:
         report["issues"] = [_issue("PREFLIGHT_INVALID", "Node75 preflight report is invalid")]
         return _finish(report, output_dir=output, status="invalid", code=1)
@@ -441,8 +516,44 @@ def run_daily_research_service_release_run_admission_startup_smoke(
                 report["startup_status"] = "failed"
                 report["issues"] = [_issue("SERVICE_EXITED", "service process exited unexpectedly")]
                 break
-            startup_report = _validate_node75_report(startup_report_path, expected_mode="serve")
+            startup_report = _validate_node75_report(
+                startup_report_path,
+                expected_mode="serve",
+                expected_inputs=paths,
+                root=root,
+            )
             if startup_report is not None:
+                bound_fields = (
+                    "startup_version",
+                    "admission_version",
+                    "audit_version",
+                    "release_version",
+                    "admission_path",
+                    "admission_sha256",
+                    "admission_report_path",
+                    "admission_report_sha256",
+                    "admission_audit_path",
+                    "admission_audit_sha256",
+                    "release_manifest_path",
+                    "release_manifest_sha256",
+                    "release_report_path",
+                    "release_report_sha256",
+                    "release_audit_path",
+                    "release_audit_sha256",
+                    "symbol",
+                    "as_of",
+                    "evaluation_at",
+                    "admission_status",
+                    "admission_ready",
+                    "audit_status",
+                    "audit_ready",
+                )
+                if any(startup_report[field] != preflight[field] for field in bound_fields):
+                    report["startup_status"] = "failed"
+                    report["issues"] = [
+                        _issue("STARTUP_CHAIN_MISMATCH", "startup report differs from preflight")
+                    ]
+                    break
                 report["startup_report_path"], report["startup_report_sha256"] = _safe_meta(
                     startup_report_path, root=root
                 )
@@ -475,11 +586,12 @@ def run_daily_research_service_release_run_admission_startup_smoke(
                         ]
                         break
                     try:
+                        remaining = max(0.01, probe_deadline - time.monotonic())
                         probe = probe_daily_research_service(
                             base_url=(
                                 f"http://[{host}]:{port}" if ":" in host else f"http://{host}:{port}"
                             ),
-                            timeout_seconds=probe_timeout,
+                            timeout_seconds=min(probe_timeout, remaining),
                         )
                     except DailyResearchServiceProbeError as exc:
                         if exc.code == "SERVICE_UNAVAILABLE":

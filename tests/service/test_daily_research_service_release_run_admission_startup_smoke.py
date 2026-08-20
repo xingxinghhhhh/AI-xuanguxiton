@@ -1,10 +1,14 @@
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from a_share_ai.cli import main
 from a_share_ai.market.replay import sha256_bytes
+from a_share_ai.service import (
+    daily_research_service_release_run_admission_startup_smoke as smoke_module,
+)
 from a_share_ai.service.daily_research_service_release_run_admission_startup import (
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME,
 )
@@ -13,6 +17,7 @@ from a_share_ai.service.daily_research_service_release_run_admission_startup_smo
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_VERSION,
     run_daily_research_service_release_run_admission_startup_smoke,
 )
+from tests.service.test_daily_research_service_release_run import _ready_probe
 from tests.service.test_daily_research_service_release_run_admission_startup import (
     _prepare_startup,
 )
@@ -132,3 +137,123 @@ def test_smoke_rejects_timeout_and_output_escape(tmp_path: Path) -> None:
     args[args.index("--startup-timeout-seconds") + 1] = "0"
     assert main(args) == 2
     assert main(_smoke_args(paths, tmp_path / "outside")) == 2
+
+
+class _FakeProcess:
+    def __init__(self) -> None:
+        self.returncode: int | None = None
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+    def terminate(self) -> None:
+        self.returncode = 0
+
+    def wait(self, timeout: float) -> int:
+        self.returncode = 0
+        return 0
+
+
+def _write_fake_startup_report(output_dir: Path, preflight_dir: Path) -> None:
+    preflight_path = (
+        preflight_dir / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME
+    )
+    payload = json.loads(preflight_path.read_text(encoding="utf-8"))
+    payload["mode"] = "serve"
+    payload["service_started"] = True
+    payload["output_sha256"] = None
+    payload["output_sha256"] = sha256_bytes(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    )
+    startup_path = (
+        output_dir / "startup" / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME
+    )
+    startup_path.parent.mkdir(parents=True, exist_ok=True)
+    startup_path.write_bytes(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    )
+
+
+def test_startup_service_unavailable_report_retries_with_remaining_timeout(
+    tmp_path: Path,
+) -> None:
+    paths = _prepare_startup(tmp_path / "race")
+    output_dir = paths["root"] / "smoke"
+    process = _FakeProcess()
+    timeouts: list[float] = []
+    unavailable = {
+        "status": "invalid",
+        "issues": [{"code": "SERVICE_UNAVAILABLE", "message": "not listening yet"}],
+    }
+
+    def start_process(*args, **kwargs):
+        _write_fake_startup_report(output_dir, output_dir / "preflight")
+        return process
+
+    def probe(*, base_url: str, timeout_seconds: float) -> dict:
+        timeouts.append(timeout_seconds)
+        return unavailable if len(timeouts) == 1 else _ready_probe()
+
+    with (
+        patch.object(smoke_module.subprocess, "Popen", side_effect=start_process),
+        patch.object(smoke_module, "probe_daily_research_service", side_effect=probe),
+    ):
+        report, exit_code = run_daily_research_service_release_run_admission_startup_smoke(
+            admission_path=paths["admission"],
+            admission_report_path=paths["admission_report"],
+            admission_audit_path=paths["admission_audit"],
+            release_manifest_path=paths["manifest"],
+            release_report_path=paths["release_report"],
+            release_audit_path=paths["release_audit"],
+            artifact_root=paths["root"],
+            startup_timeout_seconds=0.2,
+            probe_timeout_seconds=10,
+            output_dir=output_dir,
+        )
+    assert exit_code == 0
+    assert report["status"] == "ready"
+    assert len(timeouts) == 2
+    assert all(timeout <= 0.2 for timeout in timeouts)
+
+
+def test_stale_startup_report_is_removed_before_service_start(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "stale")
+    output_dir = paths["root"] / "smoke"
+    preflight_dir = output_dir / "preflight"
+    preflight_dir.mkdir(parents=True, exist_ok=True)
+    from a_share_ai.service.daily_research_service_release_run_admission_startup import (
+        run_daily_research_service_release_run_admission_startup,
+    )
+
+    assert (
+        run_daily_research_service_release_run_admission_startup(
+            admission_path=paths["admission"],
+            report_path=paths["admission_report"],
+            audit_path=paths["admission_audit"],
+            release_manifest_path=paths["manifest"],
+            release_report_path=paths["release_report"],
+            release_audit_path=paths["release_audit"],
+            artifact_root=paths["root"],
+            output_dir=preflight_dir,
+            check_only=True,
+        )[0]
+        == 0
+    )
+    _write_fake_startup_report(output_dir, preflight_dir)
+    process = _FakeProcess()
+    with patch.object(smoke_module.subprocess, "Popen", return_value=process):
+        report, exit_code = run_daily_research_service_release_run_admission_startup_smoke(
+            admission_path=paths["admission"],
+            admission_report_path=paths["admission_report"],
+            admission_audit_path=paths["admission_audit"],
+            release_manifest_path=paths["manifest"],
+            release_report_path=paths["release_report"],
+            release_audit_path=paths["release_audit"],
+            artifact_root=paths["root"],
+            startup_timeout_seconds=0.1,
+            probe_timeout_seconds=0.1,
+            output_dir=output_dir,
+        )
+    assert exit_code == 1
+    assert report["status"] == "failed"
+    assert report["probe_status"] == "not_started"
