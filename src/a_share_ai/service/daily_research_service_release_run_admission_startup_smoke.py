@@ -422,6 +422,13 @@ def run_daily_research_service_release_run_admission_startup_smoke(
     startup_report_path = (
         startup_dir / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME
     )
+    try:
+        startup_report_path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        report["issues"] = [_issue("OUTPUT_UNAVAILABLE", "startup report is unavailable")]
+        return _finish(report, output_dir=output, status="invalid", code=1)
     deadline = time.monotonic() + startup_timeout
     try:
         process = subprocess.Popen(
@@ -493,8 +500,18 @@ def run_daily_research_service_release_run_admission_startup_smoke(
                             report["probe_status"] = "ready"
                         probe_done = True
                         break
+                    issues = probe.get("issues")
+                    first_issue = issues[0] if isinstance(issues, list) and issues else None
+                    if (
+                        probe.get("status") == "invalid"
+                        and isinstance(first_issue, Mapping)
+                        and first_issue.get("code") == "SERVICE_UNAVAILABLE"
+                        and time.monotonic() < probe_deadline
+                    ):
+                        time.sleep(0.05)
+                        continue
                     report["probe_status"] = "failed"
-                    report["issues"] = probe.get("issues", [])
+                    report["issues"] = issues if isinstance(issues, list) else []
                     break
                 else:
                     report["probe_status"] = "timeout"
