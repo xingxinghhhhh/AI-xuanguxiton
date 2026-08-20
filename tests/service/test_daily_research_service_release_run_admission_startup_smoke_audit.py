@@ -185,6 +185,35 @@ def test_blocked_admission_with_release_inputs_is_invalid(tmp_path: Path) -> Non
     assert report["run_ready"] is False
 
 
+def test_admission_failure_cannot_claim_probe_or_stop(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "admission-failure", failed=True)
+    smoke_dir = paths["root"] / "smoke"
+    smoke, smoke_code = _run_smoke(paths, smoke_dir)
+    assert smoke_code == 1
+    assert smoke["status"] == "failed"
+    smoke_path = (
+        smoke_dir / "daily_research_service_release_run_admission_startup_smoke_report.json"
+    )
+    payload = json.loads(smoke_path.read_text(encoding="utf-8"))
+    payload.update(
+        {
+            "probe_status": "ready",
+            "probe_exit_code": 0,
+            "stop_status": "controlled",
+            "service_stopped": True,
+        }
+    )
+    _refresh_compact_hash(smoke_path, payload)
+    report, code = audit_daily_research_service_release_run_admission_startup_smoke(
+        smoke_report_path=smoke_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "smoke-audit",
+    )
+    assert code == 1
+    assert report["status"] == "invalid"
+    assert report["audit_ready"] is False
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

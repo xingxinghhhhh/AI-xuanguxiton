@@ -656,6 +656,10 @@ def _validate_smoke(
             and payload["startup_status"] == "failed"
             and payload["startup_ready"] is False
             and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
         )
         probe_failure = (
             payload["admission_status"] == "ready"
