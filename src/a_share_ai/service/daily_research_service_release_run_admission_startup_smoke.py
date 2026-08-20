@@ -208,7 +208,13 @@ def _validate_node75_report(
         "release_version": DAILY_RESEARCH_SERVICE_RELEASE_VERSION,
     }
     for field, expected in expected_versions.items():
-        if payload[field] is not None and payload[field] != expected:
+        if payload["status"] == "ready" and payload[field] != expected:
+            return None
+        if (
+            payload["status"] != "ready"
+            and payload[field] is not None
+            and payload[field] != expected
+        ):
             return None
     if payload["mode"] != expected_mode or payload["decision_ready"] is not False:
         return None
@@ -263,6 +269,13 @@ def _validate_node75_report(
         "release_report": "release_report_path",
         "release_audit": "release_audit_path",
     }
+    if payload["status"] == "ready":
+        for path_field in field_map.values():
+            sha_field = path_field.replace("_path", "_sha256")
+            if not isinstance(payload[path_field], str) or not payload[path_field].strip():
+                return None
+            if not isinstance(payload[sha_field], str) or not payload[sha_field].strip():
+                return None
     for key, path_value in expected_inputs.items():
         path_field = field_map[key]
         sha_field = path_field.replace("_path", "_sha256")

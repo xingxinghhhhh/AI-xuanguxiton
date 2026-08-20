@@ -11,10 +11,12 @@ from a_share_ai.service import (
 )
 from a_share_ai.service.daily_research_service_release_run_admission_startup import (
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME,
+    run_daily_research_service_release_run_admission_startup,
 )
 from a_share_ai.service.daily_research_service_release_run_admission_startup_smoke import (
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_REPORT_NAME,
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_SMOKE_VERSION,
+    _validate_node75_report,
     run_daily_research_service_release_run_admission_startup_smoke,
 )
 from tests.service.test_daily_research_service_release_run import _ready_probe
@@ -257,3 +259,69 @@ def test_stale_startup_report_is_removed_before_service_start(tmp_path: Path) ->
     assert exit_code == 1
     assert report["status"] == "failed"
     assert report["probe_status"] == "not_started"
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "admission_version",
+        "audit_version",
+        "release_version",
+        "admission_path",
+        "admission_sha256",
+        "admission_report_path",
+        "admission_report_sha256",
+        "admission_audit_path",
+        "admission_audit_sha256",
+        "release_manifest_path",
+        "release_manifest_sha256",
+        "release_report_path",
+        "release_report_sha256",
+        "release_audit_path",
+        "release_audit_sha256",
+    ],
+)
+def test_ready_node75_report_rejects_null_bound_field(tmp_path: Path, field: str) -> None:
+    paths = _prepare_startup(tmp_path / field)
+    preflight_dir = paths["root"] / "preflight"
+    assert (
+        run_daily_research_service_release_run_admission_startup(
+            admission_path=paths["admission"],
+            report_path=paths["admission_report"],
+            audit_path=paths["admission_audit"],
+            release_manifest_path=paths["manifest"],
+            release_report_path=paths["release_report"],
+            release_audit_path=paths["release_audit"],
+            artifact_root=paths["root"],
+            output_dir=preflight_dir,
+            check_only=True,
+        )[0]
+        == 0
+    )
+    report_path = preflight_dir / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    payload[field] = None
+    payload["output_sha256"] = None
+    payload["output_sha256"] = sha256_bytes(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    )
+    report_path.write_bytes(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    )
+    inputs = {
+        "admission": paths["admission"],
+        "admission_report": paths["admission_report"],
+        "admission_audit": paths["admission_audit"],
+        "release_manifest": paths["manifest"],
+        "release_report": paths["release_report"],
+        "release_audit": paths["release_audit"],
+    }
+    assert (
+        _validate_node75_report(
+            report_path,
+            expected_mode="check_only",
+            expected_inputs=inputs,
+            root=paths["root"],
+        )
+        is None
+    )
