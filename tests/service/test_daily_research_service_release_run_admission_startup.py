@@ -3,6 +3,7 @@ import socket
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -146,6 +147,18 @@ def test_ready_check_only_writes_exact_stdout_without_binding(tmp_path: Path, ca
     assert report["startup_ready"] is True
     assert report["status"] == "ready"
     assert report["decision_ready"] is False
+    for key, path_key in (
+        ("release_manifest_path", "manifest"),
+        ("release_report_path", "release_report"),
+        ("release_audit_path", "release_audit"),
+    ):
+        assert report[key] == paths[path_key].relative_to(paths["root"]).as_posix()
+    for key, path_key in (
+        ("release_manifest_sha256", "manifest"),
+        ("release_report_sha256", "release_report"),
+        ("release_audit_sha256", "release_audit"),
+    ):
+        assert report[key] == sha256_bytes(paths[path_key].read_bytes())
     assert str(paths["root"]) not in raw.decode()
     _assert_compact_self_hash(report)
     create_server.assert_not_called()
@@ -235,6 +248,68 @@ def test_release_chain_tamper_is_invalid_and_never_binds(tmp_path: Path) -> None
         paths["root"] / "startup" / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME
     )
     assert report["status"] == "invalid"
+    create_server.assert_not_called()
+
+
+@pytest.mark.parametrize("field", ["status", "run_status"])
+@pytest.mark.parametrize("value", [[], {}, None, 1, 1.5])
+def test_non_string_admission_enum_is_invalid_without_uncaught_type_error(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    paths = _prepare_startup(tmp_path / "invalid-status")
+    payload = json.loads(paths["admission"].read_text(encoding="utf-8"))
+    payload[field] = value
+    _write_hashed(paths["admission"], payload)
+    with patch(
+        "a_share_ai.service.daily_research_service_release_run_admission_startup.create_read_only_receipt_server"
+    ) as create_server:
+        assert main(_args(paths, paths["root"] / "startup")) == 1
+    report, _ = _output(
+        paths["root"] / "startup" / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME
+    )
+    assert report["status"] == "invalid"
+    assert report["issues"][0]["code"] == "FIELD_MISMATCH"
+    create_server.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("release_version", "other-release-v1"),
+        ("symbol", "OTHER.SYMBOL"),
+        ("as_of", "2026-08-11T00:00:00Z"),
+        ("evaluation_at", "2026-08-11T01:00:00Z"),
+        ("status", "blocked"),
+        ("release_ready", False),
+        ("audit_ready", False),
+        ("startup_ready", False),
+        ("decision_ready", True),
+    ],
+)
+def test_admission_identity_must_match_loaded_release_startup(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    paths = _prepare_startup(tmp_path / "identity")
+    real_loader = load_daily_research_service_release_startup
+
+    def mismatched_loader(**kwargs):
+        return replace(real_loader(**kwargs), **{field: value})
+
+    with (
+        patch(
+            "a_share_ai.service.daily_research_service_release_run_admission_startup.load_daily_research_service_release_startup",
+            side_effect=mismatched_loader,
+        ),
+        patch(
+            "a_share_ai.service.daily_research_service_release_run_admission_startup.create_read_only_receipt_server"
+        ) as create_server,
+    ):
+        assert main(_args(paths, paths["root"] / "startup")) == 1
+    report, _ = _output(
+        paths["root"] / "startup" / DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME
+    )
+    assert report["status"] == "invalid"
+    assert report["issues"][0]["code"] == "STATE_MISMATCH"
     create_server.assert_not_called()
 
 

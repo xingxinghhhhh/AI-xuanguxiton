@@ -1368,7 +1368,9 @@ writes and prints a deterministic, compact-self-hashed startup report without
 binding; blocked, failed, tampered, or invalid inputs return `1`; configuration
 errors return `2`. Actual startup writes the same fixed report after a
 successful bind and keeps `decision_ready=false`; old startup modes are
-unchanged.
+unchanged. The v2 startup report records the relative paths and actual
+SHA-256 values of all three Node70 release inputs, and rejects any mismatch
+between the Node73 admission identity and the loaded Node70 release identity.
 
 ## Independent daily research service run audit
 

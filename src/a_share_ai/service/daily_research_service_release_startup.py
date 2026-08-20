@@ -183,6 +183,7 @@ class DailyResearchServiceReleaseStartupConfig:
     manifest_sha256: str
     report_sha256: str
     audit_sha256: str
+    release_version: str
     symbol: str
     as_of: str
     evaluation_at: str
@@ -573,6 +574,7 @@ def load_daily_research_service_release_startup(
         manifest_sha256=manifest_file["sha256"],
         report_sha256=report_file["sha256"],
         audit_sha256=audit_file["sha256"],
+        release_version=manifest["release_version"],
         symbol=manifest["symbol"],
         as_of=manifest["as_of"],
         evaluation_at=manifest["evaluation_at"],

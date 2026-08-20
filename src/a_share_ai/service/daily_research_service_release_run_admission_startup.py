@@ -31,7 +31,7 @@ from .read_only_receipt_server import (
 )
 
 DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_VERSION = (
-    "daily-research-service-release-run-admission-startup-v1"
+    "daily-research-service-release-run-admission-startup-v2"
 )
 DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME = (
     "daily_research_service_release_run_admission_startup_report.json"
@@ -109,6 +109,12 @@ _REPORT_FIELDS_OUT = {
     "admission_report_sha256",
     "admission_audit_path",
     "admission_audit_sha256",
+    "release_manifest_path",
+    "release_manifest_sha256",
+    "release_report_path",
+    "release_report_sha256",
+    "release_audit_path",
+    "release_audit_sha256",
     "symbol",
     "as_of",
     "evaluation_at",
@@ -260,6 +266,12 @@ def _bool_fields(payload: Mapping[str, Any], fields: tuple[str, ...], *, label: 
             raise _error("FIELD_MISMATCH", f"{label}.{field} is invalid")
 
 
+def _enum(value: Any, allowed: set[str], *, label: str) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise _error("FIELD_MISMATCH", f"{label} is invalid")
+    return value
+
+
 def _validate_admission(
     admission_file: Mapping[str, Any], report_file: Mapping[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -280,10 +292,12 @@ def _validate_admission(
         ("startup_ready", "service_stopped", "run_ready", "audit_ready", "admission_ready"),
         label="admission",
     )
-    if admission["status"] not in {"ready", "blocked", "failed", "invalid"}:
-        raise _error("FIELD_MISMATCH", "admission status is invalid")
-    if admission["run_status"] not in {"ready", "blocked", "failed", "invalid"}:
-        raise _error("FIELD_MISMATCH", "admission run_status is invalid")
+    _enum(admission["status"], {"ready", "blocked", "failed", "invalid"}, label="admission status")
+    _enum(
+        admission["run_status"],
+        {"ready", "blocked", "failed", "invalid"},
+        label="admission run_status",
+    )
     invalid = admission["status"] == "invalid"
     expected_versions = {
         "run_version": "daily-research-service-release-run-v1",
@@ -304,8 +318,7 @@ def _validate_admission(
     for field, allowed in status_enums.items():
         if admission[field] is None and invalid:
             continue
-        if not isinstance(admission[field], str) or admission[field] not in allowed:
-            raise _error("FIELD_MISMATCH", f"admission {field} is invalid")
+        _enum(admission[field], allowed, label=f"admission {field}")
     path_fields = ("run_report_path", "run_audit_report_path")
     sha_fields = ("run_report_sha256", "run_audit_report_sha256")
     for field in path_fields:
@@ -414,8 +427,11 @@ def _validate_audit(
     for field in _AUDIT_FIELDS & _ADMISSION_FIELDS - {"audit_version", "output_sha256"}:
         if audit[field] != admission[field]:
             raise _error("STATE_MISMATCH", f"admission audit {field} differs")
-    if audit["status"] not in {"ready", "blocked", "failed", "invalid"}:
-        raise _error("FIELD_MISMATCH", "admission audit status is invalid")
+    _enum(
+        audit["status"],
+        {"ready", "blocked", "failed", "invalid"},
+        label="admission audit status",
+    )
     if audit["status"] == "ready" and not (
         audit["audit_ready"] is True and audit["admission_ready"] is True
     ):
@@ -486,6 +502,12 @@ def _base_report(*, mode: str) -> dict[str, Any]:
         "admission_report_sha256": None,
         "admission_audit_path": None,
         "admission_audit_sha256": None,
+        "release_manifest_path": None,
+        "release_manifest_sha256": None,
+        "release_report_path": None,
+        "release_report_sha256": None,
+        "release_audit_path": None,
+        "release_audit_sha256": None,
         "symbol": None,
         "as_of": None,
         "evaluation_at": None,
@@ -516,6 +538,9 @@ def _report_from_config(
 ) -> dict[str, Any]:
     admission = config.admission
     audit = config.audit
+    release = config.release_startup
+    if release is None:
+        raise _error("STATE_MISMATCH", "release startup is unavailable")
     report = _base_report(mode=mode)
     report.update(
         {
@@ -530,6 +555,18 @@ def _report_from_config(
             "admission_report_sha256": config.report_sha256,
             "admission_audit_path": config.audit_path.relative_to(config.artifact_root).as_posix(),
             "admission_audit_sha256": config.audit_sha256,
+            "release_manifest_path": release.manifest_path.relative_to(
+                config.artifact_root
+            ).as_posix(),
+            "release_manifest_sha256": release.manifest_sha256,
+            "release_report_path": release.report_path.relative_to(
+                config.artifact_root
+            ).as_posix(),
+            "release_report_sha256": release.report_sha256,
+            "release_audit_path": release.audit_report_path.relative_to(
+                config.artifact_root
+            ).as_posix(),
+            "release_audit_sha256": release.audit_sha256,
             "symbol": admission["symbol"],
             "as_of": admission["as_of"],
             "evaluation_at": admission["evaluation_at"],
@@ -637,6 +674,22 @@ def _load_config(
         )
     except DailyResearchServiceReleaseStartupError as exc:
         raise _error(exc.code, "release startup admission is invalid") from exc
+    if (
+        admission["release_version"] != release_startup.release_version
+        or admission["symbol"] != release_startup.symbol
+        or admission["as_of"] != release_startup.as_of
+        or admission["evaluation_at"] != release_startup.evaluation_at
+        or admission["status"] != release_startup.status
+        or admission["audit_ready"] != release_startup.audit_ready
+        or admission["startup_ready"] != release_startup.startup_ready
+        or admission["decision_ready"] != release_startup.decision_ready
+        or release_startup.status != "ready"
+        or release_startup.release_ready is not True
+        or release_startup.audit_ready is not True
+        or release_startup.startup_ready is not True
+        or release_startup.decision_ready is not False
+    ):
+        raise _error("STATE_MISMATCH", "admission and release startup identity differs")
     return DailyResearchServiceReleaseRunAdmissionStartupConfig(
         artifact_root=root,
         output_dir=output_dir.resolve(),
@@ -757,26 +810,16 @@ def run_daily_research_service_release_run_admission_startup(
         )
     except ReadOnlyReceiptServiceError as exc:
         error = _error(exc.code, "read-only service startup failed")
-        raw = _write_failure(
-            output_dir=output,
+        failure_report = _report_from_config(
+            config,
             mode=mode,
-            error=error,
-            admission_file={
-                "relative_path": config.admission_path.relative_to(root).as_posix(),
-                "sha256": config.admission_sha256,
-            },
-            report_file={
-                "relative_path": config.report_path.relative_to(root).as_posix(),
-                "sha256": config.report_sha256,
-            },
-            audit_file={
-                "relative_path": config.audit_path.relative_to(root).as_posix(),
-                "sha256": config.audit_sha256,
-            },
-            admission=config.admission,
-            audit=config.audit,
+            service_started=False,
             status="failed",
+            startup_status="failed",
+            startup_ready=False,
+            issues=[_issue(error.code, str(error))],
         )
+        raw = _write_report(failure_report, output_dir=output)
         return 1, None
     ready_report = _report_from_config(
         config,

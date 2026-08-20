@@ -305,7 +305,8 @@ For actual startup, Node75 completes the same checks before creating the
 existing loopback server. It writes the ready report only after the socket is
 successfully bound, then serves the existing routes. Bind or report-write
 failures close the server and fail closed. The report is compact-self-hashed,
-relative-path-only, keeps `decision_ready=false`, and contains no PID,
+relative-path-only, records the relative paths and actual SHA-256 values of
+all three Node70 release inputs, keeps `decision_ready=false`, and contains no PID,
 command-line, logs, credentials, or secrets. This node is a startup binding
 check, not a long-term health monitor or a replacement for the Node71/72
 evidence chain.

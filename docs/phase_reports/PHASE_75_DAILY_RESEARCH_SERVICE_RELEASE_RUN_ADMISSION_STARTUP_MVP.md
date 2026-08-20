@@ -22,7 +22,7 @@ python -m a_share_ai.cli serve-research-receipt \
 
 ## Contract
 
-Version: `daily-research-service-release-run-admission-startup-v1`.
+Version: `daily-research-service-release-run-admission-startup-v2`.
 
 The new mode requires all three Node73/74 admission paths, all three Node70
 release paths, `--artifact-root`, and an `--output-dir` inside the artifact
@@ -30,9 +30,10 @@ root. It rejects mixing these options with legacy launch options. The fixed
 output is `daily_research_service_release_run_admission_startup_report.json`.
 
 The report records the startup version, Node73/74 and release versions,
-relative input paths and actual SHA-256 values, symbol/timestamps, admission
-and audit status/readiness, mode, service-started state, startup state,
-sanitized issues, `decision_ready=false`, and `output_sha256`. Its self-hash
+relative input paths and actual SHA-256 values for all three admission inputs
+and all three Node70 release inputs, symbol/timestamps, admission and audit
+status/readiness, mode, service-started state, startup state, sanitized issues,
+`decision_ready=false`, and `output_sha256`. Its self-hash
 uses sorted keys and compact UTF-8 JSON; it contains no absolute paths, PID,
 command line, process logs, credentials, or secrets.
 
