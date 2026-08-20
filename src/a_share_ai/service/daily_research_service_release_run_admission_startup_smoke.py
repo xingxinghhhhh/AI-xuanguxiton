@@ -18,6 +18,13 @@ from .daily_research_service_probe import (
     daily_research_service_probe_exit_code,
     probe_daily_research_service,
 )
+from .daily_research_service_release import DAILY_RESEARCH_SERVICE_RELEASE_VERSION
+from .daily_research_service_release_run_admission import (
+    DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_VERSION,
+)
+from .daily_research_service_release_run_admission_audit import (
+    DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_AUDIT_VERSION,
+)
 from .daily_research_service_release_run_admission_startup import (
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_REPORT_NAME,
     DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_VERSION,
@@ -195,6 +202,14 @@ def _validate_node75_report(
         return None
     if payload["startup_version"] != DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_STARTUP_VERSION:
         return None
+    expected_versions = {
+        "admission_version": DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_VERSION,
+        "audit_version": DAILY_RESEARCH_SERVICE_RELEASE_RUN_ADMISSION_AUDIT_VERSION,
+        "release_version": DAILY_RESEARCH_SERVICE_RELEASE_VERSION,
+    }
+    for field, expected in expected_versions.items():
+        if payload[field] is not None and payload[field] != expected:
+            return None
     if payload["mode"] != expected_mode or payload["decision_ready"] is not False:
         return None
     for field in ("admission_ready", "audit_ready", "startup_ready", "service_started"):
@@ -228,7 +243,12 @@ def _validate_node75_report(
             or bool(issues)
         ):
             return None
-    elif not issues or payload["startup_ready"] is not False:
+    elif (
+        not issues
+        or payload["startup_ready"] is not False
+        or payload["service_started"] is not False
+        or payload["startup_status"] != payload["status"]
+    ):
         return None
     if expected_mode == "check_only" and payload["service_started"] is not False:
         return None
@@ -248,6 +268,8 @@ def _validate_node75_report(
         sha_field = path_field.replace("_path", "_sha256")
         relative, digest = _safe_meta(path_value, root=root)
         if payload[path_field] is None and payload[sha_field] is None:
+            if payload["status"] == "ready":
+                return None
             continue
         if relative is None or digest is None:
             return None
