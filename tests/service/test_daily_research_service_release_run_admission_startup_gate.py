@@ -227,6 +227,22 @@ def test_ready_runtime_state_cannot_be_weakened_after_self_hash_refresh(tmp_path
     assert summary["status"] == "invalid"
 
 
+def test_audit_input_readiness_cannot_diverge_after_self_hash_refresh(tmp_path: Path) -> None:
+    paths = _prepare_gate(tmp_path)
+    path = paths["smoke_admission_audit"]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["input_audit_ready"] = False
+    _refresh(path, payload)
+    with patch(
+        "a_share_ai.service.daily_research_service_release_run_admission_startup_gate.load_daily_research_service_release_startup"
+    ) as loader:
+        summary, code, startup = _gate(paths)
+    assert code == 1
+    assert startup is None
+    assert summary["status"] == "invalid"
+    loader.assert_not_called()
+
+
 def test_actual_ready_mode_reuses_existing_server_entrypoint(tmp_path: Path) -> None:
     paths = _prepare_gate(tmp_path / "serve")
     with patch("a_share_ai.cli.serve_read_only_receipt") as serve:

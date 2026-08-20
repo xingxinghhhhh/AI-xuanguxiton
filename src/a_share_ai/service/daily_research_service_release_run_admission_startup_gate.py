@@ -343,6 +343,25 @@ def _validate_inputs(
     _validate_runtime_state(audit, label="admission audit")
     if not isinstance(audit["input_audit_ready"], bool):
         raise _GateFailure("FIELD_MISMATCH", "admission audit.input_audit_ready is invalid")
+    if audit["input_audit_ready"] != manifest["audit_ready"]:
+        raise _GateFailure("CHAIN_MISMATCH", "admission audit input readiness differs")
+    for field in (
+        "startup_status",
+        "startup_ready",
+        "service_started",
+        "probe_status",
+        "probe_exit_code",
+        "stop_status",
+        "service_stopped",
+        "smoke_status",
+        "audit_status",
+        "run_ready",
+        "admission_ready",
+        "audit_ready",
+        "issues",
+    ):
+        if audit[field] != manifest[field]:
+            raise _GateFailure("CHAIN_MISMATCH", f"admission audit {field} differs")
     _validate_identity(manifest, label="admission manifest")
     _validate_identity(report, label="admission report")
     _validate_identity(audit, label="admission audit")
