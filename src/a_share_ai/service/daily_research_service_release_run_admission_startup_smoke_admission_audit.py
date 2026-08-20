@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
@@ -225,6 +226,26 @@ def _validate_manifest(payload: Mapping[str, Any], *, label: str) -> None:
         _relative(payload[field], label=f"{label}.{field}")
     for field in ("smoke_report_sha256", "smoke_audit_report_sha256"):
         _sha(payload[field], label=f"{label}.{field}")
+    if not isinstance(payload["symbol"], str) or not payload["symbol"].strip():
+        raise _AuditFailure("IDENTITY_INVALID", f"{label}.symbol is invalid")
+    parsed_times: dict[str, datetime] = {}
+    for field in ("as_of", "evaluation_at"):
+        value = payload[field]
+        if not isinstance(value, str) or not value.strip():
+            raise _AuditFailure("IDENTITY_INVALID", f"{label}.{field} is invalid")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise _AuditFailure("IDENTITY_INVALID", f"{label}.{field} is invalid") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise _AuditFailure("IDENTITY_INVALID", f"{label}.{field} is invalid")
+        parsed_times[field] = parsed
+    if parsed_times["as_of"] > parsed_times["evaluation_at"]:
+        raise _AuditFailure("IDENTITY_INVALID", f"{label} time order is invalid")
+    _validate_runtime_state(payload, label=label)
+
+
+def _validate_runtime_state(payload: Mapping[str, Any], *, label: str) -> None:
     if payload["status"] == "ready":
         if not (
             payload["smoke_status"] == "ready"
@@ -242,19 +263,80 @@ def _validate_manifest(payload: Mapping[str, Any], *, label: str) -> None:
             and not payload["issues"]
         ):
             raise _AuditFailure("STATE_MISMATCH", f"{label} ready state is invalid")
-    elif payload["status"] in {"blocked", "failed"}:
+        return
+    if payload["status"] == "blocked":
         if not (
             payload["smoke_status"] == payload["status"]
             and payload["audit_status"] == payload["status"]
+            and payload["startup_status"] == "blocked"
+            and payload["startup_ready"] is False
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
             and payload["run_ready"] is False
             and payload["audit_ready"] is True
             and payload["admission_ready"] is False
             and payload["issues"]
         ):
-            raise _AuditFailure("STATE_MISMATCH", f"{label} non-ready state is invalid")
-    elif not (
+            raise _AuditFailure("STATE_MISMATCH", f"{label} blocked state is invalid")
+        return
+    if payload["status"] == "failed":
+        admission_failure = (
+            payload["startup_status"] == "failed"
+            and payload["startup_ready"] is False
+            and payload["service_started"] is False
+            and payload["probe_status"] == "not_started"
+            and payload["probe_exit_code"] is None
+            and payload["stop_status"] == "not_attempted"
+            and payload["service_stopped"] is False
+        )
+        probe_failure = (
+            payload["startup_status"] == "ready"
+            and payload["startup_ready"] is True
+            and payload["service_started"] is True
+            and payload["probe_status"] in {"failed", "timeout", "service_exited"}
+            and (
+                (payload["probe_status"] == "timeout" and payload["probe_exit_code"] is None)
+                or (
+                    payload["probe_status"] == "failed"
+                    and (payload["probe_exit_code"] is None or payload["probe_exit_code"] > 0)
+                )
+                or (
+                    payload["probe_status"] == "service_exited"
+                    and payload["probe_exit_code"] in {None, 0}
+                )
+            )
+            and (
+                (payload["stop_status"] == "controlled" and payload["service_stopped"] is True)
+                or (
+                    payload["stop_status"] in {"uncontrolled_exit", "failed"}
+                    and payload["service_stopped"] is False
+                )
+            )
+        )
+        if not (
+            payload["smoke_status"] == "failed"
+            and payload["audit_status"] == "failed"
+            and payload["run_ready"] is False
+            and payload["audit_ready"] is True
+            and payload["admission_ready"] is False
+            and payload["issues"]
+            and (admission_failure or probe_failure)
+        ):
+            raise _AuditFailure("STATE_MISMATCH", f"{label} failed state is invalid")
+        return
+    if not (
         payload["smoke_status"] == "invalid"
         and payload["audit_status"] == "invalid"
+        and payload["startup_status"] == "invalid"
+        and payload["startup_ready"] is False
+        and payload["service_started"] is False
+        and payload["probe_status"] == "not_started"
+        and payload["probe_exit_code"] is None
+        and payload["stop_status"] == "not_attempted"
+        and payload["service_stopped"] is False
         and payload["run_ready"] is False
         and payload["audit_ready"] is False
         and payload["admission_ready"] is False

@@ -131,6 +131,105 @@ def test_single_file_tamper_is_invalid(tmp_path: Path, target: str) -> None:
     assert result["audit_ready"] is False
 
 
+@pytest.mark.parametrize("field, value", [("symbol", ""), ("as_of", None)])
+def test_ready_identity_is_required(tmp_path: Path, field: str, value: object) -> None:
+    paths = _prepare_startup(tmp_path / field)
+    admission_path, report_path = _pair(paths)
+    manifest = json.loads(admission_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    report[field] = value
+    _refresh(admission_path, manifest)
+    _refresh(report_path, report)
+    result, code = audit_daily_research_service_release_run_admission_startup_smoke_admission(
+        admission_path=admission_path,
+        report_path=report_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "audit",
+    )
+    assert code == 1
+    assert result["status"] == "invalid"
+
+
+def test_ready_time_order_and_timezone_are_required(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "time-order")
+    admission_path, report_path = _pair(paths)
+    manifest = json.loads(admission_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    for payload in (manifest, report):
+        payload["as_of"] = "2026-08-11T02:00:00Z"
+        payload["evaluation_at"] = "2026-08-11T01:00:00"
+    _refresh(admission_path, manifest)
+    report["admission_sha256"] = sha256_bytes(admission_path.read_bytes())
+    _refresh(report_path, report)
+    result, code = audit_daily_research_service_release_run_admission_startup_smoke_admission(
+        admission_path=admission_path,
+        report_path=report_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "audit",
+    )
+    assert code == 1
+    assert result["status"] == "invalid"
+
+
+def test_blocked_runtime_state_cannot_be_promoted_to_ready(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "blocked-runtime", blocked=True)
+    admission_path, report_path = _pair(paths)
+    manifest = json.loads(admission_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    for payload in (manifest, report):
+        payload["startup_ready"] = True
+        payload["service_started"] = True
+        payload["probe_status"] = "ready"
+        payload["probe_exit_code"] = 0
+        payload["stop_status"] = "controlled"
+        payload["service_stopped"] = True
+    _refresh(admission_path, manifest)
+    _refresh(report_path, report)
+    result, code = audit_daily_research_service_release_run_admission_startup_smoke_admission(
+        admission_path=admission_path,
+        report_path=report_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "audit",
+    )
+    assert code == 1
+    assert result["status"] == "invalid"
+
+
+def test_failed_probe_runtime_state_requires_valid_failure_shape(tmp_path: Path) -> None:
+    paths = _prepare_startup(tmp_path / "failed-runtime")
+    admission_path, report_path = _pair(paths)
+    manifest = json.loads(admission_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    for payload in (manifest, report):
+        payload["status"] = "failed"
+        payload["smoke_status"] = "failed"
+        payload["audit_status"] = "failed"
+        payload["admission_ready"] = False
+        payload["audit_ready"] = True
+        payload["run_ready"] = False
+        payload["startup_status"] = "ready"
+        payload["startup_ready"] = True
+        payload["service_started"] = True
+        payload["probe_status"] = "timeout"
+        payload["probe_exit_code"] = None
+        payload["stop_status"] = "controlled"
+        payload["service_stopped"] = True
+        payload["issues"] = [{"code": "PROBE_TIMEOUT", "message": "service probe timed out"}]
+    _refresh(admission_path, manifest)
+    report["admission_sha256"] = sha256_bytes(admission_path.read_bytes())
+    _refresh(report_path, report)
+    result, code = audit_daily_research_service_release_run_admission_startup_smoke_admission(
+        admission_path=admission_path,
+        report_path=report_path,
+        artifact_root=paths["root"],
+        output_dir=paths["root"] / "audit",
+    )
+    assert code == 1
+    assert result["status"] == "failed"
+    assert result["audit_ready"] is True
+
+
 @pytest.mark.parametrize("mutation", ["unknown", "bad_type", "bad_sha", "decision"])
 def test_schema_and_gate_mutations_are_invalid(tmp_path: Path, mutation: str) -> None:
     paths = _prepare_startup(tmp_path / mutation)
