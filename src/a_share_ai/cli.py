@@ -164,6 +164,10 @@ from .service.daily_research_service_release_run_admission_startup_smoke import 
     DailyResearchServiceReleaseRunAdmissionStartupSmokeError,
     run_daily_research_service_release_run_admission_startup_smoke,
 )
+from .service.daily_research_service_release_run_admission_startup_smoke_admission import (
+    DailyResearchServiceReleaseRunAdmissionStartupSmokeAdmissionError,
+    build_daily_research_service_release_run_admission_startup_smoke_admission,
+)
 from .service.daily_research_service_release_run_admission_startup_smoke_audit import (
     DailyResearchServiceReleaseRunAdmissionStartupSmokeAuditError,
     audit_daily_research_service_release_run_admission_startup_smoke,
@@ -1024,6 +1028,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "--artifact-root", type=Path, required=True
     )
     daily_service_release_run_admission_startup_smoke_audit.add_argument(
+        "--output-dir", type=Path, required=True
+    )
+
+    daily_service_release_run_admission_startup_smoke_admission = subparsers.add_parser(
+        "build-daily-research-service-release-run-admission-startup-smoke-admission",
+        help="build a read-only admission summary from Node76 and Node77 receipts",
+    )
+    daily_service_release_run_admission_startup_smoke_admission.add_argument(
+        "--smoke-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke_admission.add_argument(
+        "--smoke-audit-report", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke_admission.add_argument(
+        "--artifact-root", type=Path, required=True
+    )
+    daily_service_release_run_admission_startup_smoke_admission.add_argument(
         "--output-dir", type=Path, required=True
     )
 
@@ -2611,6 +2632,25 @@ def audit_daily_research_service_release_run_admission_startup_smoke_command(
     return exit_code
 
 
+def build_daily_research_service_release_run_admission_startup_smoke_admission_command(
+    args: argparse.Namespace,
+) -> int:
+    try:
+        manifest, report, exit_code = (
+            build_daily_research_service_release_run_admission_startup_smoke_admission(
+                smoke_report_path=args.smoke_report,
+                smoke_audit_report_path=args.smoke_audit_report,
+                artifact_root=args.artifact_root,
+                output_dir=args.output_dir,
+            )
+        )
+    except DailyResearchServiceReleaseRunAdmissionStartupSmokeAdmissionError as exc:
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 2 if exc.configuration else 1
+    print(json.dumps({"manifest": manifest, "report": report}, ensure_ascii=False, sort_keys=True))
+    return exit_code
+
+
 def run_daily_research_service_audit_command(args: argparse.Namespace) -> int:
     try:
         report = audit_daily_research_service_run(
@@ -2888,6 +2928,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_daily_research_service_release_run_admission_startup_smoke_command(args)
     if args.command == "audit-daily-research-service-release-run-admission-startup-smoke":
         return audit_daily_research_service_release_run_admission_startup_smoke_command(args)
+    if args.command == "build-daily-research-service-release-run-admission-startup-smoke-admission":
+        return build_daily_research_service_release_run_admission_startup_smoke_admission_command(
+            args
+        )
     if args.command == "audit-daily-research-service-run":
         return run_daily_research_service_audit_command(args)
     if args.command == "build-daily-research-service-release":

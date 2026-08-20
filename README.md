@@ -1595,3 +1595,26 @@ startup, the three release inputs may be absent; the audit still validates the
 complete available admission chain and does not claim release evidence that is
 not present. The audit is read-only, deterministic, relative-path-only, and
 always keeps `decision_ready=false`.
+
+## Node78 startup smoke admission summary
+
+Node78 consumes the Node76 smoke receipt and the independent Node77 audit
+receipt to produce one read-only admission summary:
+
+```bash
+python -m a_share_ai.cli \
+  build-daily-research-service-release-run-admission-startup-smoke-admission \
+  --smoke-report reports/daily-service-release-run-admission-startup-smoke/daily_research_service_release_run_admission_startup_smoke_report.json \
+  --smoke-audit-report reports/daily-service-release-run-admission-startup-smoke-audit/daily_research_service_release_run_admission_startup_smoke_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-admission
+```
+
+The command writes a compact manifest and report pair. `admission_ready=true`
+is emitted only when both receipts are complete, self-consistent, and ready;
+consistent blocked or failed runtime evidence remains non-ready with exit `1`.
+Malformed, tampered, path-escaping, version-incompatible, or contradictory
+inputs are invalid with exit `1`; configuration errors return `2`. Node78
+does not rerun the smoke or audit, start a process, open a socket, call HTTP,
+refresh data, call AI or external APIs, authorize trading, or set
+`decision_ready=true`.

@@ -363,3 +363,26 @@ receipt is deterministic, relative-path-only, and keeps `decision_ready=false`.
 If Node76 stops before release startup because admission is blocked or failed,
 the three release inputs may be absent; the audit preserves that bounded
 evidence state rather than treating absent release evidence as ready.
+
+## Node78 startup smoke admission summary
+
+Node78 combines the Node76 smoke receipt and Node77 independent audit receipt
+without rerunning either node:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-release-run-admission-startup-smoke-admission \
+  --smoke-report reports/daily-service-release-run-admission-startup-smoke/daily_research_service_release_run_admission_startup_smoke_report.json \
+  --smoke-audit-report reports/daily-service-release-run-admission-startup-smoke-audit/daily_research_service_release_run_admission_startup_smoke_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-admission
+```
+
+It writes a manifest and a report with relative paths, SHA-256 references,
+runtime state, status, sanitized issues, and `decision_ready=false`.
+`admission_ready=true` requires ready smoke and audit receipts with matching
+identity, state, hashes, and empty issues. A consistent blocked or failed
+runtime returns `1` and remains non-ready; invalid or contradictory evidence
+also returns `1` with `audit_ready=false`; invalid root/output configuration
+returns `2`. This node is offline and read-only: it does not start a process,
+open a socket, call HTTP, refresh data, call AI or external APIs, or authorize
+trading.
