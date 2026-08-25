@@ -1,0 +1,23 @@
+{
+  "lookup": [{"code": "600000", "orgId": "gssh0600000", "zwjc": "浦发银行"}],
+  "pages": [
+    {
+      "totalRecordNum": 1,
+      "hasMore": false,
+      "announcements": [
+        {
+          "secCode": "600000",
+          "secName": "浦发银行",
+          "orgId": "gssh0600000",
+          "announcementId": "1225000001",
+          "announcementTitle": "未来公告",
+          "announcementTime": 1767312000000,
+          "adjunctUrl": "finalpage/2026-01-02/1225000001.PDF",
+          "adjunctSize": 88,
+          "adjunctType": "PDF"
+        }
+      ]
+    }
+  ],
+  "content": {}
+}

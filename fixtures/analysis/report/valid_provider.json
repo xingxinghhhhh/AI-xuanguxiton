@@ -1,0 +1,80 @@
+{
+  "analysis_version": "analysis-report-v1",
+  "as_of": "2026-08-10T12:00:00+00:00",
+  "schema_version": "1.0",
+  "sections": {
+    "announcements": [
+      {
+        "claim_id": "announcements-001",
+        "citation_ids": ["announcements"],
+        "kind": "observation",
+        "observed_dates": ["2026-08-07"],
+        "text": "公告查询已完成，事实索引引用现有公告快照。"
+      }
+    ],
+    "growth": [
+      {
+        "claim_id": "growth-001",
+        "citation_ids": ["growth"],
+        "kind": "observation",
+        "observed_dates": ["2026-03-31"],
+        "text": "成长能力快照可用，报告期字段已绑定到点时证据。"
+      }
+    ],
+    "market": [
+      {
+        "claim_id": "market-001",
+        "citation_ids": ["market"],
+        "kind": "observation",
+        "observed_dates": ["2026-08-07"],
+        "text": "行情健康与交易日历覆盖均已通过上游校验。"
+      }
+    ],
+    "price_plan": [
+      {
+        "claim_id": "price-plan-001",
+        "citation_ids": ["price_plan", "technical"],
+        "kind": "observation",
+        "observed_dates": ["2026-08-07"],
+        "text": "价格计划引用已验证的技术报告和价格计划文件。"
+      }
+    ],
+    "profitability": [
+      {
+        "claim_id": "profitability-001",
+        "citation_ids": ["profitability"],
+        "kind": "observation",
+        "observed_dates": ["2026-03-31"],
+        "text": "盈利能力快照可用，已保留公告日和报告期引用。"
+      }
+    ],
+    "risks": [
+      {
+        "claim_id": "risk-001",
+        "citation_ids": ["market"],
+        "kind": "risk",
+        "observed_dates": [],
+        "text": "研究结果依赖行情健康与交易日历覆盖校验。"
+      }
+    ],
+    "technical": [
+      {
+        "claim_id": "technical-001",
+        "citation_ids": ["technical"],
+        "kind": "observation",
+        "observed_dates": ["2026-08-07"],
+        "text": "技术特征已通过上游就绪校验。"
+      }
+    ],
+    "unknowns": [
+      {
+        "claim_id": "unknown-001",
+        "citation_ids": ["market", "announcements"],
+        "kind": "unknown",
+        "observed_dates": [],
+        "text": "离线报告不解释因果关系，公告事实仍需人工复核。"
+      }
+    ]
+  },
+  "symbol": "600000.SH"
+}

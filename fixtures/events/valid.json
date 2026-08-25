@@ -1,0 +1,63 @@
+{
+  "lookup": [
+    {"code": "600000", "orgId": "gssh0600000", "zwjc": "浦发银行"}
+  ],
+  "pages": [
+    {
+      "totalRecordNum": 3,
+      "hasMore": false,
+      "announcements": [
+        {
+          "secCode": "600000",
+          "secName": "浦发银行",
+          "orgId": "gssh0600000",
+          "announcementId": "1225000001",
+          "announcementTitle": "未来公告",
+          "announcementTime": 1767312000000,
+          "adjunctUrl": "finalpage/2026-01-02/1225000001.PDF",
+          "adjunctSize": 88,
+          "adjunctType": "PDF",
+          "columnId": "250401",
+          "pageColumn": "SHZB",
+          "announcementType": "01010503",
+          "announcementTypeName": "临时公告"
+        },
+        {
+          "secCode": "600000",
+          "secName": "浦发银行",
+          "orgId": "gssh0600000",
+          "announcementId": "1224905574",
+          "announcementTitle": "关于公司章程修订获核准的公告",
+          "announcementTime": 1767052800000,
+          "adjunctUrl": "finalpage/2025-12-30/1224905574.PDF",
+          "adjunctSize": 102,
+          "adjunctType": "PDF",
+          "columnId": "250401||251302",
+          "pageColumn": "SHZB",
+          "announcementType": "01010503",
+          "announcementTypeName": "临时公告"
+        },
+        {
+          "secCode": "600000",
+          "secName": "浦发银行",
+          "orgId": "gssh0600000",
+          "announcementId": "1224900843",
+          "announcementTitle": "董事会会议决议公告",
+          "announcementTime": 1766966400000,
+          "adjunctUrl": "finalpage/2025-12-29/1224900843.PDF",
+          "adjunctSize": 101,
+          "adjunctType": "PDF",
+          "columnId": "250401||251302",
+          "pageColumn": "SHZB",
+          "announcementType": "01010503",
+          "announcementTypeName": "临时公告"
+        }
+      ]
+    }
+  ],
+  "content": {
+    "1224905574": "pdf-one",
+    "1224900843": "pdf-two",
+    "1225000001": "pdf-future"
+  }
+}

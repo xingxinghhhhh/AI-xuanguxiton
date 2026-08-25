@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "calendar_version": "cn-a-share-fixture-2026-01-narrow-v1",
+  "market": "CN-A",
+  "timezone": "Asia/Shanghai",
+  "covered_start": "2026-01-02",
+  "covered_end": "2026-01-05",
+  "trading_dates": ["2026-01-02", "2026-01-05"]
+}

@@ -1,0 +1,34 @@
+{
+  "lookup": [{"code": "600000", "orgId": "gssh0600000", "zwjc": "浦发银行"}],
+  "pages": [
+    {
+      "totalRecordNum": 2,
+      "hasMore": false,
+      "announcements": [
+        {
+          "secCode": "600000",
+          "secName": "浦发银行",
+          "orgId": "gssh0600000",
+          "announcementId": "1224905574",
+          "announcementTitle": "公告A",
+          "announcementTime": 1767052800000,
+          "adjunctUrl": "finalpage/2025-12-30/1224905574.PDF",
+          "adjunctSize": 102,
+          "adjunctType": "PDF"
+        },
+        {
+          "secCode": "600000",
+          "secName": "浦发银行",
+          "orgId": "gssh0600000",
+          "announcementId": "1224905574",
+          "announcementTitle": "公告B",
+          "announcementTime": 1766966400000,
+          "adjunctUrl": "finalpage/2025-12-29/1224905574.PDF",
+          "adjunctSize": 101,
+          "adjunctType": "PDF"
+        }
+      ]
+    }
+  ],
+  "content": {}
+}

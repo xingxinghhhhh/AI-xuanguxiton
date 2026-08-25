@@ -1,0 +1,24 @@
+{
+  "analysis_version": "analysis-report-v1",
+  "as_of": "2026-08-10T12:00:00+00:00",
+  "schema_version": "1.0",
+  "sections": {
+    "announcements": [],
+    "growth": [],
+    "market": [],
+    "price_plan": [],
+    "profitability": [],
+    "risks": [],
+    "technical": [
+      {
+        "claim_id": "unknown-evidence",
+        "citation_ids": ["news"],
+        "kind": "observation",
+        "observed_dates": [],
+        "text": "该观察引用了不属于 bundle 的证据。"
+      }
+    ],
+    "unknowns": []
+  },
+  "symbol": "600000.SH"
+}

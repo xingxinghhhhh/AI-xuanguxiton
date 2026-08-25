@@ -1,1 +1,1743 @@
-# AI-xuanguxiton
+# A股选股系统
+
+这是 A 股投研与决策辅助系统的第一个离线 MVP。当前节点只处理只读日频行情：
+
+```text
+标准化日频行情 -> JSONL 模拟回放 -> 数据健康门 -> 健康报告
+```
+
+系统不会连接券商、同花顺或其他真实数据源，不会下单，也不会输出买入或卖出建议。
+
+## 环境
+
+- Python 3.11+
+- pytest（测试）
+- ruff（代码检查，可选）
+
+项目不依赖 pandas、行情 SDK 或网络服务。
+
+如需启用 Baostock 适配器，单独安装可选依赖：
+
+```bash
+python -m pip install -e ".[baostock]"
+```
+
+## 安装与运行
+
+```bash
+python -m pip install -e .
+python -m a_share_ai.cli replay-health \
+  --input fixtures/market/valid_daily.jsonl \
+  --as-of 2026-08-10T12:00:00Z \
+  --output-dir reports/replay-001
+```
+
+健康报告写入：
+
+- `reports/replay-001/replay_output.jsonl`：标准化、可回放的行情输出；
+- `reports/replay-001/health_report.json`：输入/输出哈希、时间范围、健康状态和问题列表。
+
+交易日历覆盖审计：
+
+```bash
+python -m a_share_ai.cli audit-coverage \
+  --bars fixtures/market/coverage/valid_daily.jsonl \
+  --calendar fixtures/market/calendar/sample.json \
+  --start 2026-01-02 \
+  --end 2026-01-06 \
+  --as-of 2026-01-07T00:00:00Z \
+  --output-dir reports/coverage-001
+```
+
+覆盖状态为 `complete` 才能进入 `decision_ready=true`；缺失交易日、非交易日行情或日历未覆盖时均返回非零退出码。
+
+## Baostock 单股票历史日线捕获
+
+该适配器固定单股票、日频和不复权（`adjustflag=3`），并保存请求、原始响应和标准化 JSONL。捕获报告本身始终为 `decision_ready=false`，必须继续通过既有健康与覆盖命令：
+
+```bash
+python -m a_share_ai.cli capture-baostock-daily \
+  --symbol 600000.SH \
+  --start 2025-06-03 \
+  --end 2025-06-06 \
+  --received-at 2026-08-10T12:00:00Z \
+  --output-dir reports/baostock-001
+
+python -m a_share_ai.cli replay-health \
+  --input reports/baostock-001/normalized_daily.jsonl \
+  --as-of 2026-08-10T12:00:00Z \
+  --output-dir reports/baostock-001/replay-health
+```
+
+不支持自动切换数据源、补值、全市场扫描或交易。
+
+CLI 在 `decision_ready=true` 时返回 0；数据无效、过期或断线时返回 1，并仍生成可审计报告。
+
+## 测试
+
+```bash
+python -m pytest
+ruff check .
+```
+
+## 安全边界
+
+- 只读行情数据，不包含订单、账户、余额或持仓接口；
+- 不读取 API key、密码或浏览器凭据；
+- 过期、断线、无效数据不会进入可决策状态；
+- 所有报告通过临时文件写入后原子替换；
+- 后续真实供应商只能实现 `MarketDataSource` 协议并输出标准模型。
+## Official announcement snapshots
+
+The read-only CNINFO adapter captures one A-share symbol's official announcement
+metadata and PDF evidence. It resolves the public organization id, queries a bounded
+date range, filters announcements by `as_of`, and writes request/raw/snapshot/report
+files plus content hashes. It never classifies an announcement or produces a trade
+decision.
+
+```bash
+python -m a_share_ai.cli capture-announcements \
+  --symbol 600000.SH \
+  --start 2025-12-29 \
+  --end 2025-12-31 \
+  --as-of 2025-12-31 \
+  --received-at 2026-08-10T12:00:00Z \
+  --output-dir reports/announcements-001
+```
+
+The command is intentionally single-symbol and low-frequency. Future, malformed,
+duplicated, out-of-order, unavailable, or incomplete evidence is fail-closed and
+keeps `decision_ready=false`.
+
+## Evidence-backed offline analysis report
+
+The `analysis-report-v1` node converts an already validated
+`analysis-input-v1` bundle into a deterministic research report. It uses an
+offline JSON response fixture as the provider boundary, expands stable bundle
+names into a top-level citation index with paths and SHA-256 values, and never
+produces a trade decision.
+
+```bash
+python -m a_share_ai.cli analyze-input \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --input-root reports \
+  --response-fixture fixtures/analysis/report/valid_provider.json \
+  --output-dir reports/analysis-report-001
+```
+
+The command writes `research_analysis.json` and
+`research_analysis_report.json`. Any bundle, evidence, provider, symbol,
+cutoff, citation, future-date, or prohibited-decision violation is
+fail-closed with `analysis_ready=false`; `decision_ready` remains false for
+every result. No real AI API, credentials, network, database, or trading path
+is used.
+
+## Explicit OpenAI research provider
+
+The real provider is opt-in and single-request only. It sends only the validated
+bundle summaries, symbol, cutoff, and fixed evidence IDs to the OpenAI Responses
+API. Local evidence paths, hashes, credentials, and original files are not sent.
+The response is validated by the same `analysis-report-v1` fail-closed validator;
+`decision_ready` remains `false` even when `analysis_ready` is `true`.
+
+Configure the key locally in the ignored `.env.local` file:
+
+```env
+OPENAI_API_KEY=your_key_here
+```
+
+Run the real provider explicitly; it never falls back to the offline fixture:
+
+```bash
+python -m a_share_ai.cli analyze-input \
+  --provider openai \
+  --model gpt-5.6-luna \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --output-dir reports/analysis-openai-001
+```
+
+The command writes `ai_request.json`, `ai_response.json`,
+`research_analysis.json`, and `research_analysis_report.json`. Request and
+response SHA-256 values, provider status, model, and timestamps are recorded;
+the API key is never written to those files or CLI output. Ordinary tests use a
+fake transport and remain offline.
+
+## Explicit DeepSeek research provider
+
+DeepSeek is also opt-in and single-request only. It uses the official Chat
+Completions JSON mode rather than the OpenAI Responses API schema. The returned
+JSON is still passed through the same local `analysis-report-v1` validator, so
+invalid fields, citations, dates, or trading instructions fail closed.
+
+Configure the key locally in the ignored `.env.local` file:
+
+```env
+DEEPSEEK_API_KEY=your_key_here
+```
+
+Run it explicitly with the default `deepseek-v4-flash` model:
+
+```bash
+python -m a_share_ai.cli analyze-input \
+  --provider deepseek \
+  --model deepseek-v4-flash \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --env-file .env.local \
+  --output-dir reports/analysis-deepseek-001
+```
+
+The DeepSeek request contains no local paths, hashes, original files, or API
+key. It writes the same audit artifacts as the OpenAI provider and never falls
+back or retries.
+
+## Benchmark market-context snapshot
+
+The `market-context-v1` command captures a read-only, point-in-time snapshot of
+three fixed Baostock indexes: `000001.SH` (上证综合指数), `399001.SZ` (深证成指),
+and `399006.SZ` (创业板指). It does not ask DeepSeek for a market judgment and
+does not produce a trading conclusion.
+
+```bash
+python -m a_share_ai.cli capture-market-context \
+  --start 2026-01-02 \
+  --end 2026-01-06 \
+  --as-of 2026-01-06T12:00:00+00:00 \
+  --received-at 2026-01-07T00:00:00+00:00 \
+  --calendar fixtures/market/calendar/sample.json \
+  --output-dir reports/market-context-001
+```
+
+The command writes `request.json`, `raw_response.json`,
+`market_context_snapshot.json`, and `market_context_report.json`. It validates
+calendar coverage, point-in-time boundaries, complete coverage for all three
+indexes, Decimal OHLCV values, and SHA-256 audit hashes. Any provider or data
+failure keeps `market_context_ready=false` and `decision_ready=false`.
+
+## Analysis input v2 with market context
+
+To include the fixed benchmark snapshot in the existing evidence bundle, pass
+both market-context files to `build-analysis-input`. This creates an explicit
+`analysis-input-v2` bundle; existing v1 bundles are never rewritten or upgraded
+implicitly.
+
+```bash
+python -m a_share_ai.cli build-analysis-input \
+  --symbol 600000.SH \
+  --as-of 2026-01-06T12:00:00+00:00 \
+  --input-root reports \
+  --market-context-snapshot reports/market-context-001/market_context_snapshot.json \
+  --market-context-report reports/market-context-001/market_context_report.json \
+  ...
+```
+
+The two paths are required as a pair. The v2 bundle keeps the same six evidence
+IDs and adds the snapshot/report references and SHA-256 values to the existing
+`market` evidence. It verifies the market-context version, readiness gate,
+calendar hash/version, exact `as_of`, fixed index set, record hashes and
+point-in-time dates. All analysis, quality, decision-input, and safety outputs
+continue to keep `decision_ready=false`.
+
+The v2 market summary also includes the deterministic
+`market-context-summary-v1` features `latest_trade_date`, `latest_close`,
+`return_1d`, `return_5d`, `return_20d`, and `record_count` for each fixed index.
+Returns use `close_latest / close_n_periods_ago - 1`; unavailable warmup periods
+are represented as `null`.
+
+## Analysis input v2 relative strength summary
+
+When a v2 bundle includes market context, the technical summary also contains a
+deterministic `relative-strength-v1` object. For each fixed benchmark index it
+provides the stock return fields from `technical-v1`, the benchmark return
+fields, and `relative_return_1d`, `relative_return_5d`, and
+`relative_return_20d`, calculated as `stock_return_n - benchmark_return_n`.
+Insufficient stock or benchmark history stays `null`; the summary does not
+assign strong/weak labels, rankings, or trading signals. The v1 bundle and
+technical indicator calculation remain unchanged.
+
+## Market-aware offline end-to-end replay
+
+To verify that the v2 market summary and relative-strength summary survive the
+complete read-only research chain, run the offline replay with an existing v2
+bundle and the normal provider response fixture:
+
+```bash
+python -m a_share_ai.cli replay-market-aware-analysis \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --response-fixture fixtures/analysis/report/valid_provider.json \
+  --output-dir reports/market-aware-replay-001
+```
+
+The `market-aware-replay-v1` report runs offline analysis, Markdown rendering,
+quality, decision-input, safety, and pending-only human review in order. It
+records stage paths and SHA-256 values and verifies that
+`market-context-summary-v1` and `relative-strength-v1` are present. The replay
+stops on the first failed stage, never calls DeepSeek, never creates a review
+result or research release, and keeps `decision_ready=false`.
+
+## Market-aware DeepSeek smoke test
+
+After an explicit v2 input bundle is available, a single controlled DeepSeek
+smoke test can be run with the configured local environment file:
+
+```bash
+python -m a_share_ai.cli market-aware-smoke \
+  --bundle reports/market-aware-smoke-node27-20260811/input/analysis_input/analysis_input_bundle.json \
+  --bundle-report reports/market-aware-smoke-node27-20260811/input/analysis_input/analysis_input_report.json \
+  --input-root reports/market-aware-smoke-node27-20260811/input \
+  --env-file .env.local \
+  --model deepseek-v4-flash \
+  --output-dir reports/market-aware-smoke-node27-20260811/smoke
+```
+
+The command makes one request with no retry, fallback, or provider switching,
+records redacted provider/request/response audit metadata, and then reuses the
+offline replay chain. A provider or downstream schema failure stops the chain;
+it never fabricates readiness or creates a review result/research release.
+
+## Render a readable research report
+
+After a successful `analyze-input` run, render the validated JSON and evidence
+citations as deterministic Markdown without another API call:
+
+```bash
+python -m a_share_ai.cli render-analysis \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --input-root reports \
+  --output-dir reports/analysis-deepseek-001/rendered
+```
+
+This writes `research_analysis.md` and `analysis_render_report.json`. It checks
+the analysis SHA, evidence paths and hashes, escapes model text for Markdown,
+and refuses reports that are not analysis-ready or that set `decision_ready` to
+true.
+
+## Offline analysis quality and evidence audit
+
+The `analysis-quality-v1` node audits a rendered `analysis-report-v1` result
+without another API call. It verifies all eight sections, 100% claim citation
+coverage, the fixed section-to-evidence mapping, use of all six evidence IDs,
+input and rendered-report hashes, and the non-trading decision gate.
+
+```bash
+python -m a_share_ai.cli audit-analysis-quality \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --render-report reports/analysis-deepseek-001/rendered/analysis_render_report.json \
+  --input-root reports \
+  --output-dir reports/analysis-deepseek-001/quality
+```
+
+The command writes `analysis_quality_report.json` with `quality_ready=true`
+only when the complete evidence audit passes. It never calls an AI provider,
+reads credentials, or sets `decision_ready=true`.
+
+## Decision input readiness snapshot
+
+After the analysis, render, and quality artifacts all pass, build a final
+cross-checked input snapshot for a future decision module. This is an input
+readiness gate only; it is not a trading authorization and always keeps
+`decision_ready=false`.
+
+## Independent daily research service release audit
+
+Node69 independently verifies the Node68 release admission:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release \
+  --manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --report reports/daily-service-release/daily_research_service_release_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-audit
+```
+
+It rechecks both Node68 files and the referenced Node66/67 chain, recomputes
+`release_ready`, and writes a deterministic
+`daily_research_service_release_audit_report.json`. Failed or blocked releases
+may be audited but are never promoted; the command is read-only and keeps
+`decision_ready=false`.
+
+## Audited daily research release startup
+
+Node70 binds a ready Node68 release and Node69 release audit to the existing
+Node65 loopback startup chain:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --artifact-root reports \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --check-only
+```
+
+The three release arguments must be supplied together. The loader validates the
+Node68/69 chain, Node66/67 references and the existing Node65 gate before any
+socket is opened. A ready chain can then start the existing read-only loopback
+service using the host, port and receipt inputs from Node65; blocked, failed,
+tampered or out-of-root artifacts return without binding. Legacy direct,
+launch-manifest and daily-launch-gate paths remain compatible when the Node70
+release group is omitted. `decision_ready` remains `false`.
+
+## Research freshness audit
+
+Check whether a published research package corresponds to the latest completed
+trading day at a fixed evaluation time:
+
+```bash
+python -m a_share_ai.cli audit-research-freshness \
+  --release-manifest reports/analysis-deepseek-001/release/research_release_manifest.json \
+  --release-report reports/analysis-deepseek-001/release/research_release_report.json \
+  --calendar fixtures/market/calendar/sample.json \
+  --calendar-report reports/calendar_report.json \
+  --evaluation-at 2026-08-11T08:00:00+00:00 \
+  --output-dir reports/analysis-deepseek-001/freshness
+```
+
+The `research-freshness-v1` report uses Asia/Shanghai and a fixed 15:00 close:
+before the close, the current day is not complete; after the close, it may be
+the latest completed trading day; weekends and holidays fall back to the prior
+trading day. It returns `fresh`, `stale`, `calendar_unknown`, or `invalid`, and
+always keeps `decision_ready=false`. It does not use system current time or
+make any investment or transaction judgement.
+
+```bash
+python -m a_share_ai.cli build-decision-input \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --render-report reports/analysis-deepseek-001/rendered/analysis_render_report.json \
+  --quality-report reports/analysis-deepseek-001/quality/analysis_quality_report.json \
+  --bundle reports/analysis-input-001/analysis_input_bundle.json \
+  --bundle-report reports/analysis-input-001/analysis_input_report.json \
+  --input-root reports \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/decision-input
+```
+
+The command writes `decision_input_snapshot.json` and
+`decision_input_report.json`, verifies the upstream paths, hashes, versions,
+symbol, cutoff time, readiness states, and future-date guard, and never calls
+AI, reads API keys, or produces BUY/SELL/HOLD output.
+
+## Analysis safety audit
+
+Before a future decision module consumes the snapshot, audit the final
+structured claims and rendered Markdown for action-oriented or execution
+language:
+
+```bash
+python -m a_share_ai.cli audit-analysis-safety \
+  --decision-input reports/analysis-deepseek-001/decision-input/decision_input_snapshot.json \
+  --decision-input-report reports/analysis-deepseek-001/decision-input/decision_input_report.json \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --render-report reports/analysis-deepseek-001/rendered/analysis_render_report.json \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/safety
+```
+
+The command writes `analysis_safety_report.json`. It checks the complete input
+chain and reports stable rule IDs and locations for forbidden actions, prices,
+positions, recommendations, unexpected decision fields, and Markdown/HTML/link
+or code-fence bypasses. `safety_ready=true` is independent of
+`decision_input_ready` and never changes `decision_ready=false`.
+
+## Manual analysis review packet
+
+After the safety gate passes, create a deterministic, pending-only checklist
+for human review:
+
+```bash
+python -m a_share_ai.cli build-analysis-review \
+  --decision-input reports/analysis-deepseek-001/decision-input/decision_input_snapshot.json \
+  --decision-input-report reports/analysis-deepseek-001/decision-input/decision_input_report.json \
+  --safety-report reports/analysis-deepseek-001/safety/analysis_safety_report.json \
+  --analysis reports/analysis-deepseek-001/research_analysis.json \
+  --analysis-report reports/analysis-deepseek-001/research_analysis_report.json \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/review
+```
+
+This writes `analysis_review_packet.json` and
+`analysis_review_report.json`. Each claim appears once with its evidence paths
+and SHA-256 values, `review_status=pending`, `review_complete=false`, and
+`decision_ready=false`. It does not write or accept human review decisions.
+
+## Human review record
+
+Submit a complete JSON record after a human has checked each claim and its
+evidence mapping:
+
+```bash
+python -m a_share_ai.cli apply-analysis-review \
+  --packet reports/analysis-deepseek-001/review/analysis_review_packet.json \
+  --packet-report reports/analysis-deepseek-001/review/analysis_review_report.json \
+  --submission reports/analysis-deepseek-001/review/review_submission.json \
+  --output-dir reports/analysis-deepseek-001/review-result
+```
+
+The submission contains the packet SHA-256 and one item per `review_id`.
+Allowed statuses are `confirmed`, `challenged`, and `follow_up`; the latter
+two require notes and every `reviewed_at` timestamp must include a timezone.
+Unknown, duplicate, missing, extra, or transaction-related fields fail closed.
+The result records `review_complete` and `review_gate_pass`, but always keeps
+`decision_ready=false`; a passed review gate is not trade authorization.
+
+## Research release manifest
+
+After the safety audit and a complete all-confirmed human review, build a
+single-stock release manifest for downstream readers or a future decision
+module:
+
+```bash
+python -m a_share_ai.cli build-research-release \
+  --decision-input reports/analysis-deepseek-001/decision-input/decision_input_snapshot.json \
+  --decision-input-report reports/analysis-deepseek-001/decision-input/decision_input_report.json \
+  --safety-report reports/analysis-deepseek-001/safety/analysis_safety_report.json \
+  --analysis-review-packet reports/analysis-deepseek-001/review/analysis_review_packet.json \
+  --analysis-review-result reports/analysis-deepseek-001/review-result/analysis_review_result.json \
+  --analysis-review-result-report reports/analysis-deepseek-001/review-result/analysis_review_result_report.json \
+  --artifact-root reports \
+  --output-dir reports/analysis-deepseek-001/release
+```
+
+This writes `research_release_manifest.json` and
+`research_release_report.json`. The `research-release-v1` manifest contains
+only controlled relative paths, versions, statuses, and SHA-256 values for the
+six upstream artifacts. It blocks challenged/follow-up reviews, hash or
+symbol/cutoff mismatches, path escapes, future cutoffs, and upstream failures.
+`research_release_ready=true` means the research package is internally
+consistent and ready to read; it never changes `decision_ready=false` and is
+not trade authorization.
+
+## Market-aware review-to-release replay
+
+For the `analysis-input-v2` market-aware chain, the review and release steps
+can be replayed together after a human supplies an explicit submission:
+
+```bash
+python -m a_share_ai.cli replay-market-aware-release \
+  --packet reports/analysis-deepseek-001/review/analysis_review_packet.json \
+  --packet-report reports/analysis-deepseek-001/review/analysis_review_report.json \
+  --submission reports/analysis-deepseek-001/review/review_submission.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/release-replay
+```
+
+The command only consumes `review_submission.json`; it never generates or
+modifies a human decision. It requires the market context and relative
+strength summaries, records both stage reports and hashes, and stops before
+release when the submission is invalid or not fully `confirmed`. A successful
+replay writes the existing review result and research release artifacts plus
+`market_aware_release_replay_report.json`; `decision_ready` remains `false`.
+
+## Market-aware research session admission
+
+After a reviewed market-aware release exists, build the read-only session admission
+report with explicit evaluation and reference times:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session \
+  --release-manifest reports/analysis-deepseek-001/release-replay/release/research_release_manifest.json \
+  --release-report reports/analysis-deepseek-001/release-replay/release/research_release_report.json \
+  --replay-report reports/analysis-deepseek-001/release-replay/market_aware_release_replay_report.json \
+  --calendar fixtures/market/calendar/sample.json \
+  --calendar-report reports/calendar_report.json \
+  --evaluation-at 2026-08-10T13:00:00+00:00 \
+  --reference-at 2026-08-12T12:00:00+00:00 \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session
+```
+
+The `market-aware-session-v1` report admits a session only when the release,
+review, v2 market summaries, and `research-freshness-v1` audit are all valid.
+`--reference-at` is explicit and required: an evaluation after it returns
+`TIME_IN_FUTURE`, while a release after the evaluation returns
+`RELEASE_AFTER_EVALUATION`; only then can an uncovered calendar produce
+`CALENDAR_UNKNOWN`. A ready session still keeps `decision_ready=false` and
+contains no trading instruction or authorization.
+
+## Render a market-aware session report
+
+Render the session admission metadata as deterministic Markdown without another
+API call:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session \
+  --session reports/analysis-deepseek-001/session/market_aware_session.json \
+  --session-report reports/analysis-deepseek-001/session/market_aware_session_report.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session-render
+```
+
+The `market-aware-session-render-v1` renderer verifies the session/report
+fields, their actual SHA-256 values, the same-directory
+`research_freshness_report.json`, versions, status gates, time fields, and
+artifact-root boundaries. Release, bundle, and calendar hashes are shown as
+declared summaries only; the renderer does not infer upstream paths that the
+session contract does not contain. Blocked sessions may be rendered as blocked
+Markdown, but never as ready and always keep `decision_ready=false`.
+
+## Build a market-aware session audit package
+
+Package the session admission and rendering artifacts into a deterministic,
+relative-path manifest for offline handoff and later verification:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-package \
+  --session reports/analysis-deepseek-001/session/market_aware_session.json \
+  --session-report reports/analysis-deepseek-001/session/market_aware_session_report.json \
+  --freshness-report reports/analysis-deepseek-001/session/research_freshness_report.json \
+  --session-markdown reports/analysis-deepseek-001/session-render/market_aware_session.md \
+  --session-render-report reports/analysis-deepseek-001/session-render/market_aware_session_render_report.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session-package
+```
+
+The `market-aware-session-package-v1` manifest records five fixed artifact
+roles, relative paths, byte sizes, and actual SHA-256 values. It also records
+the session status and time summary. Blocked sessions may be packaged, but
+`package_ready` and `session_ready` remain distinct and
+`decision_ready=false` always. Declared release, bundle, and calendar hashes
+remain summaries only; no missing upstream path is inferred.
+
+## Independently audit a market-aware session package
+
+Re-open a package as an offline consumer and verify the manifest, package
+report, and all five declared artifacts without rebuilding the package:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-package \
+  --package reports/analysis-deepseek-001/session-package/market_aware_session_package.json \
+  --package-report reports/analysis-deepseek-001/session-package/market_aware_session_package_report.json \
+  --artifact-root reports/analysis-deepseek-001 \
+  --output-dir reports/analysis-deepseek-001/session-package-audit
+```
+
+The `market-aware-session-package-audit-v1` report independently checks
+relative paths, actual byte sizes, SHA-256 values, versions, timezone-aware
+time ordering, and the session/freshness/renderer relation chain. A successful
+audit means package integrity only: a stale or blocked package can have
+`audit_ready=true` while retaining `session_ready=false` and
+`decision_ready=false`. The audit report is written only when its output
+directory is inside `artifact-root`.
+
+## Compare two market-aware session packages
+
+Compare two packages that have each passed the independent Node33 audit:
+
+```bash
+python -m a_share_ai.cli compare-market-aware-session-packages \
+  --previous-package reports/previous/session-package/market_aware_session_package.json \
+  --previous-package-report reports/previous/session-package/market_aware_session_package_report.json \
+  --previous-artifact-root reports/previous \
+  --current-package reports/current/session-package/market_aware_session_package.json \
+  --current-package-report reports/current/session-package/market_aware_session_package_report.json \
+  --current-artifact-root reports/current \
+  --output-dir reports/current/session-package-diff
+```
+
+The `market-aware-session-package-diff-v1` outputs report literal changes in
+session/package fields and the five artifact roles' relative paths, byte
+sizes, and SHA-256 values. The symbols must match and the current `as_of` must
+be later. This is a structural diff only; it keeps `decision_ready=false` and
+does not infer whether any change is favorable or actionable.
+
+## Render a market-aware session package diff
+
+Render the Node34 structural diff for readable, offline handoff:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-package-diff \
+  --diff reports/current/session-package-diff/market_aware_session_package_diff.json \
+  --diff-report reports/current/session-package-diff/market_aware_session_package_diff_report.json \
+  --input-root reports/current \
+  --output-dir reports/current/session-package-diff-render
+```
+
+The `market-aware-session-package-diff-render-v1` output shows literal field
+and five-artifact changes, validates the Node34 diff/report SHA binding, and
+keeps `decision_ready=false`. It is a safe Markdown view only: it does not
+judge market direction, predict returns, or create an investment or trading
+instruction.
+
+## Audit a rendered market-aware session package diff
+
+Independently verify the Node35 diff JSON, report, Markdown, and render report:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-package-diff-render \
+  --diff reports/current/session-package-diff/market_aware_session_package_diff.json \
+  --diff-report reports/current/session-package-diff/market_aware_session_package_diff_report.json \
+  --markdown reports/current/session-package-diff-render/market_aware_session_package_diff.md \
+  --render-report reports/current/session-package-diff-render/market_aware_session_package_diff_render_report.json \
+  --artifact-root reports/current \
+  --output-dir reports/current/session-package-diff-render-audit
+```
+
+The `market-aware-session-package-diff-render-audit-v1` report independently
+checks versions, relative paths, byte sizes, SHA-256 bindings, symbol/time
+metadata, and comparison/render status. A blocked render can audit as
+complete while remaining blocked; `audit_ready` does not mean research
+validity or trading authorization, and `decision_ready` remains false.
+
+## Build a market-aware session history
+
+Compose explicit package references into a deterministic chronological history:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history \
+  --spec reports/session-history/session_history_spec.json \
+  --history-root reports/session-history \
+  --output-dir reports/session-history/history
+```
+
+The `market-aware-session-history-v1` spec contains at least two package
+manifest/report/artifact-root references, all relative to `history-root`. Each
+package is independently checked with the Node33 package audit; symbols must
+match and `as_of` values must be strictly increasing. Stale or blocked
+sessions remain visibly blocked in the history and are never upgraded to
+ready. The history is a file-based manifest only and keeps
+`decision_ready=false`.
+
+## Audit a market-aware session history
+
+Independently verify a history manifest, its report, and every referenced
+package:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-root reports/session-history \
+  --output-dir reports/session-history/history-audit
+```
+
+The `market-aware-session-history-audit-v1` report reuses the Node33 package
+audit and checks history/report hashes, relative references, package SHA and
+state bindings, symbols, freshness, and strict `as_of` ordering. It verifies
+integrity only: stale or blocked sessions remain blocked and
+`decision_ready=false`.
+
+## Render a market-aware session history
+
+Render the Node37 history and Node38 audit as a deterministic, offline
+Markdown timeline:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-history \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-audit-report reports/session-history/history-audit/market_aware_session_history_audit_report.json \
+  --history-root reports/session-history \
+  --output-dir reports/session-history/history-render
+```
+
+The `market-aware-session-history-render-v1` output records the actual input
+paths, byte sizes, SHA-256 values, package timeline, readiness flags, and
+Markdown SHA. Stale or blocked histories remain visibly blocked, and
+`render_ready` is true only when both history and independent audit readiness
+are true. This is a read-only status view: it does not infer market trends,
+returns, investment value, or trading authorization, and always keeps
+`decision_ready=false`.
+
+## Audit a rendered market-aware session history
+
+Independently verify the Node39 Markdown render and its report against the
+Node37 history and Node38 history audit:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-render \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-audit-report reports/session-history/history-audit/market_aware_session_history_audit_report.json \
+  --markdown reports/session-history/history-render/market_aware_session_history.md \
+  --render-report reports/session-history/history-render/market_aware_session_history_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-render-audit
+```
+
+The `market-aware-session-history-render-audit-v1` report checks the five
+input files' actual paths, sizes, SHA-256 values, versions, status fields,
+time bounds, package literals, and `decision_ready=false` chain. It does not
+re-render or interpret the history; stale or blocked state remains literal,
+and `audit_ready` is only an artifact-integrity result.
+
+## Build a market-aware session history manifest
+
+Create a portable evidence manifest for the six Node37–40 history artifacts:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-manifest \
+  --history reports/session-history/history/market_aware_session_history.json \
+  --history-report reports/session-history/history/market_aware_session_history_report.json \
+  --history-audit-report reports/session-history/history-audit/market_aware_session_history_audit_report.json \
+  --markdown reports/session-history/history-render/market_aware_session_history.md \
+  --render-report reports/session-history/history-render/market_aware_session_history_render_report.json \
+  --render-audit-report reports/session-history/history-render-audit/market_aware_session_history_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest
+```
+
+The `market-aware-session-history-manifest-v1` output records fixed artifact
+roles, controlled relative paths, byte counts, SHA-256 values, readiness
+states, and `decision_ready=false`. It requires the Node40 render audit to be
+`audit_ready=true`, but does not rerun or reinterpret any upstream artifact.
+
+## Audit a market-aware session history manifest
+
+Independently verify the Node41 manifest, report, and all six declared
+artifacts:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-manifest \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest-audit
+```
+
+The `market-aware-session-history-manifest-audit-v1` report recomputes actual
+paths, byte counts, SHA-256 values, artifact roles, status fields, and
+`decision_ready=false`. It verifies integrity only and preserves any stale or
+blocked history state.
+
+## Render a market-aware session history manifest
+
+Render the Node41 manifest and Node42 audit into a deterministic Markdown
+evidence table:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-history-manifest \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --audit-report reports/session-history/history-manifest-audit/market_aware_session_history_manifest_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest-render
+```
+
+The `market-aware-session-history-manifest-render-v1` output shows only
+literal paths, byte counts, SHA-256 values, history bounds, readiness, and
+issues. It is a read-only handoff view and always keeps
+`decision_ready=false`.
+
+## Audit a rendered market-aware session history manifest
+
+Independently verify the Node43 Markdown/render report chain:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-manifest-render \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --manifest-audit-report reports/session-history/history-manifest-audit/market_aware_session_history_manifest_audit_report.json \
+  --markdown reports/session-history/history-manifest-render/market_aware_session_history_manifest.md \
+  --render-report reports/session-history/history-manifest-render/market_aware_session_history_manifest_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-manifest-render-audit
+```
+
+The `market-aware-session-history-manifest-render-audit-v1` report checks
+paths, versions, canonical report hashes, SHA bindings, six artifact roles,
+Markdown SHA, and readiness fields without re-rendering or re-auditing the
+inputs. It always keeps `decision_ready=false`.
+
+## Close the market-aware session history evidence chain
+
+Generate a deterministic closure status from the Node41–44 reports:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-closure \
+  --manifest reports/session-history/history-manifest/market_aware_session_history_manifest.json \
+  --manifest-report reports/session-history/history-manifest/market_aware_session_history_manifest_report.json \
+  --manifest-audit-report reports/session-history/history-manifest-audit/market_aware_session_history_manifest_audit_report.json \
+  --render-report reports/session-history/history-manifest-render/market_aware_session_history_manifest_render_report.json \
+  --render-audit-report reports/session-history/history-manifest-render-audit/market_aware_session_history_manifest_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure
+```
+
+The `market-aware-session-history-closure-v1` output records only the
+evidence-chain status, time bounds, readiness flags, controlled input paths,
+and SHA-256 values. It does not add research or trading semantics and always
+keeps `decision_ready=false`.
+
+## Render the market-aware session history closure
+
+Render the Node45 closure as a deterministic, read-only Markdown view:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-history-closure \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-render
+```
+
+This writes `market_aware_session_history_closure.md` and
+`market_aware_session_history_closure_render_report.json`. The view only
+shows literal closure status, time bounds, readiness flags, evidence hashes,
+issues; the report also records the Markdown `markdown_sha256`. It never infers
+research quality, market trends, returns, or
+trading authorization. It always keeps `decision_ready=false`.
+
+## Audit the market-aware session history closure render
+
+Audit the Node46 Markdown and render report without re-rendering them:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-closure-render \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --markdown reports/session-history/history-closure-render/market_aware_session_history_closure.md \
+  --render-report reports/session-history/history-closure-render/market_aware_session_history_closure_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-render-audit
+```
+
+This writes `market_aware_session_history_closure_render_audit_report.json`.
+It verifies the Node45/46 path, SHA, state, metadata, UTF-8, and Markdown
+binding; it keeps `decision_ready=false` and does not infer a trading result.
+
+## Build the market-aware session history closure admission
+
+Create one deterministic read-only admission summary from the Node45–47
+evidence chain:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-closure-admission \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --markdown reports/session-history/history-closure-render/market_aware_session_history_closure.md \
+  --render-report reports/session-history/history-closure-render/market_aware_session_history_closure_render_report.json \
+  --render-audit-report reports/session-history/history-closure-render-audit/market_aware_session_history_closure_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-admission
+```
+
+This writes `market_aware_session_history_closure_admission.json` and
+`market_aware_session_history_closure_admission_report.json`. The admission
+flag means only that the existing offline evidence chain passed its literal
+gates; it is not a research conclusion, investment decision, or trading
+authorization. It always keeps `decision_ready=false`.
+
+## Audit the market-aware session history closure admission
+
+Audit the Node48 admission and all of its declared evidence bindings:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-closure-admission \
+  --admission reports/session-history/history-closure-admission/market_aware_session_history_closure_admission.json \
+  --admission-report reports/session-history/history-closure-admission/market_aware_session_history_closure_admission_report.json \
+  --closure reports/session-history/history-closure/market_aware_session_history_closure.json \
+  --closure-report reports/session-history/history-closure/market_aware_session_history_closure_report.json \
+  --markdown reports/session-history/history-closure-render/market_aware_session_history_closure.md \
+  --render-report reports/session-history/history-closure-render/market_aware_session_history_closure_render_report.json \
+  --render-audit-report reports/session-history/history-closure-render-audit/market_aware_session_history_closure_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-admission-audit
+```
+
+This writes `market_aware_session_history_closure_admission_audit_report.json`.
+It is a read-only integrity audit and always keeps `decision_ready=false`.
+
+## Render the market-aware session history closure admission
+
+Render the Node48 admission and Node49 audit as a deterministic Markdown view:
+
+```bash
+python -m a_share_ai.cli render-market-aware-session-history-closure-admission \
+  --admission reports/session-history/history-closure-admission/market_aware_session_history_closure_admission.json \
+  --admission-report reports/session-history/history-closure-admission/market_aware_session_history_closure_admission_report.json \
+  --admission-audit-report reports/session-history/history-closure-admission-audit/market_aware_session_history_closure_admission_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-admission-render
+```
+
+This writes `market_aware_session_history_closure_admission.md` and its
+`market_aware_session_history_closure_admission_render_report.json`. The view
+preserves ready/stale/blocked status and always keeps `decision_ready=false`.
+
+## Audit the market-aware session history closure admission render
+
+Independently audit the Node50 Markdown, render report, and their Node48/49
+bindings:
+
+```bash
+python -m a_share_ai.cli audit-market-aware-session-history-closure-admission-render \
+  --admission reports/session-history/history-closure-admission/market_aware_session_history_closure_admission.json \
+  --admission-report reports/session-history/history-closure-admission/market_aware_session_history_closure_admission_report.json \
+  --admission-audit-report reports/session-history/history-closure-admission-audit/market_aware_session_history_closure_admission_audit_report.json \
+  --markdown reports/session-history/history-closure-admission-render/market_aware_session_history_closure_admission.md \
+  --render-report reports/session-history/history-closure-admission-render/market_aware_session_history_closure_admission_render_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/history-closure-admission-render-audit
+```
+
+This writes `market_aware_session_history_closure_admission_render_audit_report.json`.
+It independently recomputes the Markdown SHA and always keeps
+`decision_ready=false`.
+
+## Build the market-aware session history final receipt
+
+Build one deterministic JSON receipt from the Node48 admission, Node50 render,
+and Node51 render audit:
+
+```bash
+python -m a_share_ai.cli build-market-aware-session-history-final-receipt \
+  --admission reports/session-history/history-closure-admission/market_aware_session_history_closure_admission.json \
+  --admission-report reports/session-history/history-closure-admission/market_aware_session_history_closure_admission_report.json \
+  --render-report reports/session-history/history-closure-admission-render/market_aware_session_history_closure_admission_render_report.json \
+  --render-audit-report reports/session-history/history-closure-admission-render-audit/market_aware_session_history_closure_admission_render_audit_report.json \
+  --artifact-root reports/session-history \
+  --output-dir reports/session-history/final-receipt
+```
+
+This writes `market_aware_session_history_final_receipt.json` and its report.
+The receipt only summarizes evidence-chain status and always keeps
+`decision_ready=false`.
+
+## Compare two research releases
+
+To inspect what changed between two completed single-stock research packages,
+run the literal structural diff audit:
+
+```bash
+python -m a_share_ai.cli compare-research-releases \
+  --previous-manifest reports/previous/release/research_release_manifest.json \
+  --previous-report reports/previous/release/research_release_report.json \
+  --current-manifest reports/current/release/research_release_manifest.json \
+  --current-report reports/current/release/research_release_report.json \
+  --previous-artifact-root reports/previous \
+  --current-artifact-root reports/current \
+  --output-dir reports/current/release-diff
+```
+
+This writes `research_release_diff.json` and
+`research_release_diff_report.json` using
+`research-release-diff-v1`. Claim IDs are classified as unchanged, added,
+removed, or changed; changed claims report only literal differences in kind,
+text, citation IDs, or observed dates. Evidence, artifact, risk, and unknown
+changes are reported separately. The command rejects time reversal, symbol or
+SHA mismatches, path escapes, incomplete reviews, unverified evidence, and
+transaction fields. It never performs semantic good/bad analysis and always
+keeps `decision_ready=false`.
+
+## Run the read-only research receipt service
+
+Node53 provides a small standard-library HTTP boundary for an already validated
+Node52 final receipt. It reads only the receipt and its report, binds to
+`127.0.0.1` by default, and never rebuilds the evidence chain or calls an
+external provider:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --receipt reports/session-history/final-receipt/market_aware_session_history_final_receipt.json \
+  --receipt-report reports/session-history/final-receipt/market_aware_session_history_final_receipt_report.json \
+  --artifact-root reports/session-history \
+  --host 127.0.0.1 \
+  --port 8765
+```
+
+The process refuses to listen when either input is outside `--artifact-root`,
+has invalid JSON or self-hashes, has a mismatched receipt SHA, disagrees on
+status/readiness metadata, or sets `decision_ready` to true. The read-only
+routes are:
+
+- `GET /healthz`: process and receipt are loaded; returns HTTP 200.
+- `GET /readyz`: returns HTTP 200 only when `receipt_ready=true`, otherwise
+  HTTP 503 for a valid stale or blocked receipt.
+- `GET /v1/research/receipt`: returns a fixed summary without local paths or
+  source files.
+
+Only `127.0.0.1` and `::1` are accepted as hosts. This is an operator-facing
+local service boundary, not an authenticated public deployment, database,
+scheduler, trading API, or investment recommendation service. Every response
+keeps `decision_ready=false`.
+
+## Probe the read-only receipt service
+
+Node54 adds a platform-independent deployment/process-manager probe. It makes
+exactly three GET requests to the loopback service, disables proxies, rejects
+redirects and external URLs, and writes one JSON result to standard output:
+
+```bash
+python -m a_share_ai.cli probe-research-receipt-service \
+  --base-url http://127.0.0.1:8765 \
+  --timeout-seconds 3
+```
+
+Exit code `0` means `/healthz`, `/readyz`, and
+`/v1/research/receipt` passed, `/readyz` returned 200,
+`receipt_ready=true`, and `decision_ready=false`. Exit code `1` means the
+service is unavailable, malformed, stale, blocked, or not ready. Exit code `2`
+means the URL or timeout argument is invalid. The probe does not restart,
+retry, write files, or contact external services. It is not a public health
+endpoint and never changes `decision_ready=false`.
+
+## Versioned launch and rollback manifest
+
+Node55 adds a strict, path-bounded launch manifest for deployment handoff. The
+manifest contains the service/probe versions, relative receipt paths, exact
+SHA-256 values, loopback host/port, and `decision_ready=false`. Unknown fields,
+path escapes, hash changes, version mismatches, and invalid Node52/53 receipt
+contracts fail closed.
+
+Check it without binding a port, then start the same configuration:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --launch-manifest reports/service/read_only_receipt_service_launch.json \
+  --artifact-root reports/service \
+  --check-only
+
+python -m a_share_ai.cli serve-research-receipt \
+  --launch-manifest reports/service/read_only_receipt_service_launch.json \
+  --artifact-root reports/service
+```
+
+The manifest and both referenced files must be inside `artifact-root`. The
+direct `--receipt`/`--receipt-report` form remains compatible. Selecting a
+previous valid manifest provides a read-only rollback to its receipt; Node54
+still decides whether the running service is ready. A stale or blocked receipt
+is preserved as such, and every path keeps `decision_ready=false`.
+
+## One-shot daily research refresh
+
+Node56 adds a manually triggered, single-stock, single-pass public-data run. It
+reuses the existing Baostock daily and benchmark adapters, calendar/health and
+coverage audits, technical features and price plan, quarterly fundamentals,
+CNINFO announcements, and the `analysis-input-v2` builder.
+
+The strict runtime spec and all referenced files must be under `input-root`.
+Use one consistent point-in-time value for `as_of` and `received_at`:
+
+```json
+{
+  "run_version": "daily-research-run-v1",
+  "symbol": "600000.SH",
+  "start_date": "2026-08-01",
+  "end_date": "2026-08-10",
+  "as_of": "2026-08-10T12:00:00+00:00",
+  "received_at": "2026-08-10T12:00:00+00:00",
+  "calendar_path": "market/calendar.json",
+  "fundamentals_start": {"year": 2025, "quarter": 1},
+  "fundamentals_end": {"year": 2026, "quarter": 2},
+  "announcement_start": "2026-01-01",
+  "announcement_end": "2026-08-10"
+}
+```
+
+Run it explicitly:
+
+```bash
+python -m a_share_ai.cli run-daily-research \
+  --spec runtime_spec.json \
+  --input-root reports \
+  --output-dir reports/daily-run-001 \
+  --source-mode public-read-only
+```
+
+The run produces a stage-by-stage `daily_research_run_report.json`. A failed
+stage stops the run and marks later stages `skipped`; there are no retries,
+provider fallbacks, schedules, multi-stock scans, DeepSeek calls, trading
+actions, or BUY/SELL/HOLD outputs. Every result keeps `decision_ready=false`.
+
+## Daily research run audit
+
+Node57 independently audits an existing run without re-running providers or
+reading API keys. It verifies the fixed nine-stage order, fail-closed
+ready/blocked flow, controlled relative paths, artifact SHA-256 values, the
+`analysis-input-v2` chain, and the non-trading `decision_ready=false` gate.
+
+```bash
+python -m a_share_ai.cli audit-daily-research-run \
+  --run-report reports/daily-run-001/daily_research_run_report.json \
+  --artifact-root reports/daily-run-001 \
+  --output-dir reports/daily-run-001-audit
+```
+
+The audit writes `daily_research_run_audit_report.json` with versioned run
+metadata, the failed stage when blocked, issues, and a deterministic
+`output_sha256` self-hash. The command exits `0` only when `audit_ready=true`;
+an auditable but blocked upstream run exits `1`, and invalid CLI parameters
+exit `2`;
+any missing, changed, out-of-root, incomplete, misordered, or decision-enabled
+input fails closed.
+
+## Daily research freshness admission
+
+Node58 adds a read-only admission check that combines a ready Node56 run, its
+Node57 audit, and a versioned trading calendar. It evaluates the run at an
+explicit `evaluation_at` using the Asia/Shanghai 15:00 close boundary and
+returns `ready`, `stale`, `calendar_unknown`, `blocked`, or `invalid`.
+
+```bash
+python -m a_share_ai.cli build-daily-research-admission \
+  --run-report reports/daily-run-001/daily_research_run_report.json \
+  --run-audit-report reports/daily-run-001-audit/daily_research_run_audit_report.json \
+  --calendar reports/calendar.json \
+  --calendar-report reports/calendar_report.json \
+  --evaluation-at 2026-08-17T13:00:00+00:00 \
+  --artifact-root reports \
+  --output-dir reports/daily-admission
+```
+
+Only a `ready` result sets `admission_ready=true` and returns exit code `0`;
+stale, unknown-calendar, blocked, and invalid results remain
+`decision_ready=false` and return `1`. Invalid CLI parameters return `2`.
+
+## Read-only daily admission service
+
+Node59 optionally exposes the Node58 state through the existing loopback
+receipt service. Without the three daily options, the original service routes
+and readiness behavior are unchanged.
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --receipt reports/final-receipt/receipt.json \
+  --receipt-report reports/final-receipt/receipt-report.json \
+  --artifact-root reports \
+  --daily-admission reports/daily-admission/daily_research_admission.json \
+  --daily-admission-report reports/daily-admission/daily_research_admission_report.json \
+  --daily-admission-root reports
+```
+
+`GET /v1/research/daily-admission` returns a fixed safe whitelist. `/healthz`
+remains 200 when the input is valid; when daily admission is configured, the
+legacy `/healthz`, `/readyz`, and `/v1/research/receipt` summaries expose one
+combined Node54-probe-compatible readiness state. `/readyz` is 200 only when
+both the original receipt and the daily admission are ready. Stale, blocked,
+calendar-unknown, and invalid admissions make `/readyz` return 503 while
+preserving `decision_ready=false`.
+
+## Daily research service deployment probe
+
+Node60 provides a deployment probe that requires all four Node59 read-only
+routes, including the daily admission endpoint:
+
+```bash
+python -m a_share_ai.cli probe-daily-research-service \
+  --base-url http://127.0.0.1:8765 \
+  --timeout-seconds 3
+```
+
+Exit `0` means the service and daily admission are ready with
+`decision_ready=false`; exit `1` means the service is unavailable, invalid, or
+blocked/not ready; invalid URL or timeout arguments return exit `2`. The probe
+is loopback-only, disables proxies, rejects redirects and sensitive paths, and
+does not write files.
+
+## Controlled daily research startup handoff
+
+Node61 aggregates the existing run, audit, and admission artifacts into a
+deterministic handoff package for manual service startup:
+
+```bash
+python -m a_share_ai.cli build-daily-research-handoff \
+  --run-report reports/daily-run-001/daily_research_run_report.json \
+  --run-audit-report reports/daily-run-001-audit/daily_research_run_audit_report.json \
+  --admission reports/daily-admission/daily_research_admission.json \
+  --admission-report reports/daily-admission/daily_research_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-handoff
+```
+
+The handoff is read-only: it validates exact versions, self-hashes, bounded
+paths, artifact hashes, symbol/time consistency, and `decision_ready=false`.
+Only a mutually consistent ready chain returns exit `0` and
+`handoff_ready=true`; stale or blocked inputs return `1`, while invalid
+configuration or contracts return `2`. It does not start services, write a
+launch manifest, access external APIs, or authorize trading.
+
+## Independent daily research handoff audit
+
+Node62 independently audits an existing Node61 handoff and all four upstream
+artifact bytes without rebuilding or modifying them:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-handoff \
+  --handoff reports/daily-handoff/daily_research_handoff.json \
+  --handoff-report reports/daily-handoff/daily_research_handoff_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-handoff-audit
+```
+
+The audit writes `daily_research_handoff_audit_report.json` with actual input
+SHA-256 values, independently checked versions, paths, metadata, readiness,
+and sanitized issues. Valid ready, stale, and blocked handoffs return exit `0`
+when the audit itself is complete; only a valid ready chain can keep
+`handoff_ready=true`. Invalid JSON, fields, hashes, timestamps, or path
+boundaries return exit `1` in the report and configuration errors return exit
+`2`. `decision_ready` remains `false`; the command does not rebuild the
+handoff, start a service, access a network/API key, schedule work, or authorize
+trading.
+
+## Independent release-run audit
+
+Node72 independently audits the Node71 release-run receipt and its complete
+Node68/69 → Node66/67 → Node65 artifact chain:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run \
+  --run-report reports/daily-service-release-run/daily_research_service_release_run_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-audit
+```
+
+The audit is read-only: it does not start a service, call Node60 or HTTP, read
+API keys, refresh data, or modify input artifacts. It rechecks actual hashes,
+self-hashes, fixed filenames, normalized paths, versions, timestamps, and
+startup/probe/stop state. A valid blocked or failed run may be
+`audit_ready=true` but still returns CLI `1`; only an independently verified
+ready run returns `0`. Invalid configuration returns `2`, and
+`decision_ready=false` remains enforced.
+
+## Release-run read-only admission
+
+Node73 consumes only the Node71 run receipt and the Node72 independent audit
+report to produce a controlled, non-trading admission summary:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-release-run-admission \
+  --run-report reports/daily-service-release-run/daily_research_service_release_run_report.json \
+  --run-audit-report reports/daily-service-release-run-audit/daily_research_service_release_run_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission
+```
+
+It writes `daily_research_service_release_run_admission.json` and its
+`daily_research_service_release_run_admission_report.json`. Only a complete
+Node71/Node72 ready chain returns `0` with `admission_ready=true`; valid
+blocked or failed chains return `1` and remain fail-closed. Invalid, tampered,
+unknown-field, or out-of-root inputs also return `1`; configuration errors
+return `2`. The command reads no upstream artifacts beyond these two inputs,
+never starts or probes a service, and always keeps `decision_ready=false`.
+
+## Independent release-run admission pair audit
+
+After Node73 creates its admission pair, independently check both files:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission \
+  --admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-audit
+```
+
+Node74 checks the two fixed schemas, self-hashes, actual SHA-256 values,
+root-relative paths, report-to-admission bindings, versions, and internal
+state derivation without reading Node71/72 or rerunning Node73. A consistent
+ready pair returns `0`; blocked or failed pairs remain auditable but return
+`1`; tampered or invalid pairs return `1`, and configuration errors return
+`2`. The output is
+`daily_research_service_release_run_admission_audit_report.json` and keeps
+`decision_ready=false`. This proves consistency of the supplied Node73 pair,
+not resistance to coordinated rewriting of both files, and does not replace
+the independent Node71 receipt or Node72 audit.
+
+## Audited release-run admission startup
+
+Node75 makes the Node73 admission and Node74 pair audit the final read-only
+startup gate for the existing Node70 release service:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --artifact-root reports \
+  --daily-run-admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --daily-run-admission-report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --daily-run-admission-audit reports/daily-service-release-run-admission-audit/daily_research_service_release_run_admission_audit_report.json \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --output-dir reports/daily-service-release-run-admission-startup \
+  --check-only
+```
+
+All three Node73/74 admission paths and all three Node70 release paths are
+required, and `--output-dir` must stay inside `--artifact-root`. The new mode
+cannot be mixed with legacy launch options. Only a fully ready admission/audit
+and release startup chain may bind the existing loopback service. Check-only
+writes and prints a deterministic, compact-self-hashed startup report without
+binding; blocked, failed, tampered, or invalid inputs return `1`; configuration
+errors return `2`. Actual startup writes the same fixed report after a
+successful bind and keeps `decision_ready=false`; old startup modes are
+unchanged. The v2 startup report records the relative paths and actual
+SHA-256 values of all three Node70 release inputs, and rejects any mismatch
+between the Node73 admission identity and the loaded Node70 release identity.
+
+## Independent daily research service run audit
+
+Node67 audits an existing Node66 run report without starting the loopback
+service or calling HTTP:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-run \
+  --run-report reports/daily-service-run/daily_research_service_run_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-run-audit
+```
+
+The command rechecks the run report schema and self-hash, gate/audit paths and
+SHA-256 values, and the Node65 audited startup chain. It writes a deterministic
+`daily_research_service_run_audit_report.json`; ready, failed, and blocked
+runs may be auditable, but only ready remains `run_ready=true`. Any invalid,
+tampered, missing, unknown-field, or out-of-root input fails closed, and
+`decision_ready` remains `false`.
+
+## Daily research service release admission
+
+Node68 binds a Node66 run report to its Node67 independent audit for human
+deployment or rollback review:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-release \
+  --run-report reports/daily-service-run/daily_research_service_run_report.json \
+  --run-audit-report reports/daily-service-run-audit/daily_research_service_run_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release
+```
+
+It writes a self-hashed manifest and report and sets `release_ready=true` only
+for a ready Node66 run with a ready Node67 audit, matching paths, hashes,
+symbol, and timestamps. Failed, blocked, tampered, unknown-field, and
+out-of-root inputs remain unpublishable. The command never deploys or starts a
+service, accesses HTTP/API keys, refreshes data, or changes
+`decision_ready=false`.
+
+## Controlled daily research service launch gate
+
+Node63 binds the Node61 handoff and Node62 audit to the existing read-only
+service launch manifest without changing the older manifest contract:
+
+```bash
+python -m a_share_ai.cli build-daily-research-service-launch-gate \
+  --handoff reports/daily-handoff/daily_research_handoff.json \
+  --handoff-report reports/daily-handoff/daily_research_handoff_report.json \
+  --handoff-audit-report reports/daily-handoff-audit/daily_research_handoff_audit_report.json \
+  --launch-manifest reports/service/read_only_receipt_service_launch.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-gate
+```
+
+The versioned gate writes `daily_research_service_launch_gate.json` and its
+report. It rechecks the old launch manifest, handoff, audit, and daily
+admission hashes and metadata. Only a fully ready chain returns `0` and
+`gate_ready=true`; stale or blocked valid inputs return `1` and never bind a
+port. Invalid contracts also produce a fail-closed report and return `1`,
+while configuration errors return `2`.
+
+To start through the gate, use only the new gate options:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --daily-launch-gate reports/daily-service-gate/daily_research_service_launch_gate.json \
+  --daily-launch-gate-root reports \
+  --daily-launch-gate-audit reports/daily-service-gate-audit/daily_research_service_launch_gate_audit_report.json \
+  --artifact-root reports
+```
+
+Actual gate-mode startup now requires the Node64 independent audit report;
+`--check-only` with the audit validates both artifacts without listening. A
+gate-only `--check-only` remains available for Node63 compatibility, but it can
+never start the service. The old direct and Node55 `--launch-manifest` startup
+paths remain compatible, and Node60 keeps using the existing read-only
+four-route probe. The gate never refreshes data, calls external APIs, schedules
+work, or authorizes trading.
+
+## Independent daily research service launch gate audit
+
+Before starting a daily read-only service, Node64 can independently verify the
+Node63 gate and its referenced artifact chain:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-launch-gate \
+  --gate reports/daily-service-gate/daily_research_service_launch_gate.json \
+  --gate-report reports/daily-service-gate/daily_research_service_launch_gate_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-gate-audit
+```
+
+The audit writes `daily_research_service_launch_gate_audit_report.json` with
+a deterministic self-hash. It rechecks the gate/report pair, Node55 launch
+manifest, Node61 handoff/report, Node62 handoff audit, and daily
+admission/report paths and SHAs, and independently derives status/readiness.
+It accepts valid ready, stale, and blocked gates for audit only; any tamper,
+missing input, artifact-root escape, version mismatch, or inconsistent state is
+fail-closed. The command never rebuilds the gate, starts the service, calls
+Node60, uses the network, or changes `decision_ready=false`.
+
+## Audited daily research service startup binding
+
+Node65 binds the Node64 report into the actual gate-mode startup path. Before a
+socket is opened, the service revalidates the gate pair and the audit report's
+self-hash, version, gate/report paths and SHAs, status, symbol, timestamps, and
+`decision_ready=false`. Only when both `gate_ready=true` and `audit_ready=true`
+with `status=ready` does it reuse the existing receipt service. Stale, blocked,
+invalid, tampered, missing, or out-of-root inputs return `1` and do not listen;
+missing or illegal option combinations return `2`. Direct and Node55 launch
+modes remain unchanged.
+
+## Controlled daily research service run
+
+Node66 provides a manual, bounded operator run around the audited startup
+gate. It reuses Node65 validation and the existing Node60 four-route probe,
+then stops the child service and writes a self-hashed run report:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service \
+  --daily-launch-gate reports/daily-service-gate/daily_research_service_launch_gate.json \
+  --daily-launch-gate-root reports \
+  --daily-launch-gate-audit reports/daily-service-gate-audit/daily_research_service_launch_gate_audit_report.json \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-run
+```
+
+Exit `0` requires the audited service to start, all four Node60 routes to
+probe ready, and the child process to stop cleanly. Stale, blocked, invalid,
+tampered, missing, probe-failed, timed-out, or unexpectedly exited runs return
+`1`; invalid timeout/root/output configuration returns `2`. The report is
+`daily_research_service_run_report.json`, contains only relative artifact
+references and sanitized issues, preserves `decision_ready=false`, and never
+changes the gate or audit inputs. This is a manual one-shot run: it does not
+schedule, refresh, call AI or external APIs, add endpoints, or authorize
+trading.
+
+## Audited release package one-shot run
+
+Node71 runs a Node70-ready daily research release exactly once, probes the four
+Node60 loopback routes, stops the child process under controlled lifecycle
+rules, and writes a self-hashed
+`daily_research_service_release_run_report.json`:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --artifact-root reports \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-release-run
+```
+
+Only a successful Node70 admission, Node60 probe exit code `0`, no early
+service exit, and a controlled stop produce `run_ready=true` and exit `0`.
+Release, path, port, startup, probe, or cleanup failures are fail-closed with
+exit `1`; invalid configuration returns `2`. The receipt has only relative
+paths and sanitized issues, always keeps `decision_ready=false`, and does not
+schedule work, refresh data, call AI, expose a public listener, or authorize
+trading.
+
+## Node76 controlled release-run startup smoke
+
+Node76 performs one manual, bounded, loopback-only smoke run over the complete
+Node75 admission/startup path. It first runs the Node75 check-only gate, then
+starts the existing service in a child process, reuses the Node60 four-route
+probe, verifies the process remains alive after probing, and stops it with the
+existing controlled-stop semantics:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release-run-admission-startup-smoke \
+  --daily-run-admission reports/daily-service-release-run-admission/daily_research_service_release_run_admission.json \
+  --daily-run-admission-report reports/daily-service-release-run-admission/daily_research_service_release_run_admission_report.json \
+  --daily-run-admission-audit reports/daily-service-release-run-admission-audit/daily_research_service_release_run_admission_audit_report.json \
+  --daily-release-manifest reports/daily-service-release/daily_research_service_release_manifest.json \
+  --daily-release-report reports/daily-service-release/daily_research_service_release_report.json \
+  --daily-release-audit-report reports/daily-service-release-audit/daily_research_service_release_audit_report.json \
+  --artifact-root reports \
+  --startup-timeout-seconds 10 \
+  --probe-timeout-seconds 3 \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke
+```
+
+The command writes Node75 preflight and startup reports under `preflight/` and
+`startup/`, plus the final
+`daily_research_service_release_run_admission_startup_smoke_report.json`.
+Exit `0` requires a ready preflight, successful four-route probe, a live child
+before stop, controlled stop, and port release. Blocked or invalid evidence,
+startup/probe/cleanup failures, and port conflicts return `1`; invalid timeout,
+root, or output configuration returns `2`. The smoke receipt contains only
+relative paths and hashes, keeps `decision_ready=false`, never refreshes data
+or calls external APIs, and never authorizes trading.
+
+## Node77 independent startup smoke audit
+
+Node77 independently audits a Node76 smoke receipt using only files under the
+artifact root. It rechecks the smoke receipt self-hash, all six referenced
+admission/release receipt schemas, self-hashes, versions, state chains, paths,
+fixed filenames, and SHA-256 values, plus the Node75 preflight/startup reports;
+it does not start a process, open a socket, call HTTP, or claim to prove that a
+historical port was released:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission-startup-smoke \
+  --smoke-report reports/daily-service-release-run-admission-startup-smoke/daily_research_service_release_run_admission_startup_smoke_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-audit
+```
+
+The output is
+`daily_research_service_release_run_admission_startup_smoke_audit_report.json`.
+Valid ready receipts return `0` with `audit_ready=true`; internally consistent
+blocked or failed receipts return `1` with `audit_ready=true` and
+`run_ready=false`; missing, tampered, malformed, out-of-root, or inconsistent
+evidence returns `1` with `status=invalid` and `audit_ready=false`. Configuration
+errors return `2`. When Node76 stops at a blocked/failed admission before release
+startup, the three release inputs may be absent; the audit still validates the
+complete available admission chain and does not claim release evidence that is
+not present. The audit is read-only, deterministic, relative-path-only, and
+always keeps `decision_ready=false`.
+
+## Node78 startup smoke admission summary
+
+Node78 consumes the Node76 smoke receipt and the independent Node77 audit
+receipt to produce one read-only admission summary:
+
+```bash
+python -m a_share_ai.cli \
+  build-daily-research-service-release-run-admission-startup-smoke-admission \
+  --smoke-report reports/daily-service-release-run-admission-startup-smoke/daily_research_service_release_run_admission_startup_smoke_report.json \
+  --smoke-audit-report reports/daily-service-release-run-admission-startup-smoke-audit/daily_research_service_release_run_admission_startup_smoke_audit_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-admission
+```
+
+The command writes a compact manifest and report pair. `admission_ready=true`
+is emitted only when both receipts are complete, self-consistent, and ready;
+consistent blocked or failed runtime evidence remains non-ready with exit `1`.
+Malformed, tampered, path-escaping, version-incompatible, or contradictory
+inputs are invalid with exit `1`; configuration errors return `2`. Node78
+does not rerun the smoke or audit, start a process, open a socket, call HTTP,
+refresh data, call AI or external APIs, authorize trading, or set
+`decision_ready=true`.
+
+## Node82 startup-gate smoke receipt audit
+
+Node82 independently audits a Node81 smoke receipt without starting a service:
+
+```bash
+python -m a_share_ai.cli audit-daily-research-service-release-run-admission-startup-gate-smoke \
+  --smoke-report reports/node81-smoke/daily_research_service_release_run_admission_startup_gate_smoke_report.json \
+  --artifact-root reports --output-dir reports/node82-smoke-audit
+```
+
+It verifies the Node81 exact schema, self-hash, status machine, identity/time
+fields, and the six declared Node78/79/70 files with fixed filenames, relative
+paths, and actual SHA-256 values. It never starts a process, opens a socket,
+calls the probe or loader, accesses HTTP/network/API services, or modifies the
+inputs. Ready evidence returns `0`; legal blocked/failed evidence returns `1`
+with `audit_ready=true`; invalid or tampered evidence returns `1` with
+`audit_ready=false`; configuration errors return `2`. The audit receipt is
+deterministic, path-redacted, and keeps `decision_ready=false`.
+
+## Node81 Node80 startup gate E2E smoke
+
+Node81 performs one explicit, operator-triggered smoke run through the Node80
+startup gate:
+
+```bash
+python -m a_share_ai.cli run-daily-research-service-release-run-admission-startup-gate-smoke \
+  --daily-smoke-admission <node78-manifest> \
+  --daily-smoke-admission-report <node78-report> \
+  --daily-smoke-admission-audit-report <node79-audit-report> \
+  --daily-release-manifest <node70-manifest> \
+  --daily-release-report <node70-report> \
+  --daily-release-audit-report <node70-audit-report> \
+  --artifact-root reports --output-dir reports/node81-smoke
+```
+
+The command starts the existing loopback service through the Node80 parameter
+path, runs the existing Node60 four-route probe, checks that the process remains
+alive, stops it in a controlled way, and verifies the port is released. It
+writes `daily_research_service_release_run_admission_startup_gate_smoke_report.json`
+with relative paths, hashes, status fields, sanitized issues, and
+`decision_ready=false`. Blocked or invalid gates never start a process; startup,
+probe, stop, or port-release failures return `1`. Invalid timeout or output
+configuration returns `2`. No daemon, scheduler, external network, AI call,
+data refresh, or trading action is introduced.
+
+## Node79 startup smoke admission pair audit
+
+Node79 independently audits the Node78 manifest/report pair without reading
+Node76 or Node77 inputs:
+
+```bash
+python -m a_share_ai.cli \
+  audit-daily-research-service-release-run-admission-startup-smoke-admission \
+  --admission reports/daily-service-release-run-admission-startup-smoke-admission/daily_research_service_release_run_admission_startup_smoke_admission.json \
+  --report reports/daily-service-release-run-admission-startup-smoke-admission/daily_research_service_release_run_admission_startup_smoke_admission_report.json \
+  --artifact-root reports \
+  --output-dir reports/daily-service-release-run-admission-startup-smoke-admission-audit
+```
+
+The audit writes `daily_research_service_release_run_admission_startup_smoke_admission_audit_report.json`.
+It verifies both input self-hashes and actual SHA-256 values, the manifest/report
+binding, relative paths, exact fields, versions, and status semantics. Ready
+evidence returns `0`; consistent blocked or failed evidence returns `1` with
+`audit_ready=true`; invalid or tampered evidence returns `1` with
+`audit_ready=false`; configuration errors return `2`. It is offline,
+deterministic, relative-path-only, and always keeps `decision_ready=false`.
+
+## Node80 startup admission binding gate
+
+Node80 binds the Node78 admission manifest/report and Node79 independent audit
+to the existing Node70 release-startup loader. Use the separate group on the
+existing read-only service command:
+
+```bash
+python -m a_share_ai.cli serve-research-receipt \
+  --daily-smoke-admission <node78-manifest> \
+  --daily-smoke-admission-report <node78-report> \
+  --daily-smoke-admission-audit-report <node79-audit-report> \
+  --daily-release-manifest <node70-manifest> \
+  --daily-release-report <node70-report> \
+  --daily-release-audit-report <node70-audit-report> \
+  --artifact-root reports --check-only
+```
+
+Check-only mode emits a deterministic, relative-path-only summary and never
+opens a socket. Only a ready Node78/Node79 pair with matching identity,
+timestamps, statuses, paths, hashes, and `decision_ready=false`, followed by a
+successful Node70 startup load, may enter the existing loopback service. A
+blocked, failed, invalid, tampered, or out-of-root chain fails closed with exit
+`1`; incomplete or conflicting CLI configuration returns `2`. Node80 does not
+refresh data, call AI or external APIs, authorize trading, or set
+`decision_ready=true`.
+
+## Node83 read-only receipt deployment readiness
+
+Node83 performs a platform-neutral, operator-triggered pre-deployment check
+without starting the service:
+
+```bash
+python -m a_share_ai.cli check-read-only-receipt-deployment \
+  --spec reports/read-only-receipt-deployment-spec.json \
+  --artifact-root reports \
+  --output-dir reports/read-only-receipt-deployment-readiness
+```
+
+It validates the deployment spec, the Node81 smoke receipt, and the Node82
+independent audit receipt, including relative paths, actual SHA-256 values,
+self-hashes, versions, status consistency, and `decision_ready=false`. Node81
+and Node82 do not contain host/port fields, so the configured loopback host and
+port are deployment-spec-only values; the check performs one bind-and-close
+test and documents that this is only an instantaneous availability observation.
+It never starts `serve-research-receipt`, calls HTTP, starts subprocesses,
+refreshes data, calls AI/external APIs, exposes a public listener, or authorizes
+trading.
+
+The report is
+`read_only_receipt_service_deployment_readiness_report.json`. Ready evidence
+returns exit `0`; legal blocked/failed upstream evidence or an occupied port
+returns exit `1` with `deployment_status=blocked`; malformed, tampered,
+out-of-root, or inconsistent evidence returns `1` with `deployment_status=invalid`;
+configuration errors return `2`. The report is deterministic, relative-path
+only, self-hashed, and always keeps `decision_ready=false`.

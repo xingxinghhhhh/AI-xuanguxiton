@@ -1,0 +1,319 @@
+"""Analysis features built from validated market data."""
+
+from .contracts import (
+    ALLOWED_CLAIM_KINDS,
+    ANALYSIS_REPORT_SCHEMA_VERSION,
+    ANALYSIS_REPORT_VERSION,
+    ANALYSIS_SECTIONS,
+    EVIDENCE_IDS,
+    AnalysisClaim,
+    AnalysisReportConfig,
+)
+from .deepseek_provider import (
+    DeepSeekAnalysisProvider,
+    DeepSeekTransportError,
+    UrllibDeepSeekTransport,
+)
+from .market_aware_release_replay import (
+    MARKET_AWARE_RELEASE_REPLAY_VERSION,
+    MarketAwareReleaseReplayError,
+    replay_market_aware_release,
+)
+from .market_aware_replay import (
+    MARKET_AWARE_REPLAY_VERSION,
+    MarketAwareReplayError,
+    replay_market_aware_analysis,
+)
+from .market_aware_session import (
+    MARKET_AWARE_SESSION_VERSION,
+    MarketAwareSessionError,
+    build_market_aware_session,
+)
+from .market_aware_session_history import (
+    MARKET_AWARE_SESSION_HISTORY_VERSION,
+    MarketAwareSessionHistoryError,
+    build_market_aware_session_history,
+)
+from .market_aware_session_history_audit import (
+    MARKET_AWARE_SESSION_HISTORY_AUDIT_VERSION,
+    MarketAwareSessionHistoryAuditError,
+    audit_market_aware_session_history,
+)
+from .market_aware_session_history_closure import (
+    MARKET_AWARE_SESSION_HISTORY_CLOSURE_VERSION,
+    MarketAwareSessionHistoryClosureError,
+    build_market_aware_session_history_closure,
+)
+from .market_aware_session_history_closure_admission import (
+    MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_VERSION,
+    MarketAwareSessionHistoryClosureAdmissionError,
+    build_market_aware_session_history_closure_admission,
+)
+from .market_aware_session_history_closure_admission_audit import (
+    MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_AUDIT_VERSION,
+    MarketAwareSessionHistoryClosureAdmissionAuditError,
+    audit_market_aware_session_history_closure_admission,
+)
+from .market_aware_session_history_closure_admission_render_audit import (
+    MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_RENDER_AUDIT_VERSION,
+    MarketAwareSessionHistoryClosureAdmissionRenderAuditError,
+    audit_market_aware_session_history_closure_admission_render,
+)
+from .market_aware_session_history_closure_admission_renderer import (
+    MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_RENDER_VERSION,
+    MarketAwareSessionHistoryClosureAdmissionRenderError,
+    render_market_aware_session_history_closure_admission,
+)
+from .market_aware_session_history_closure_render_audit import (
+    MARKET_AWARE_SESSION_HISTORY_CLOSURE_RENDER_AUDIT_VERSION,
+    MarketAwareSessionHistoryClosureRenderAuditError,
+    audit_market_aware_session_history_closure_render,
+)
+from .market_aware_session_history_closure_renderer import (
+    MARKET_AWARE_SESSION_HISTORY_CLOSURE_RENDER_VERSION,
+    MarketAwareSessionHistoryClosureRenderError,
+    render_market_aware_session_history_closure,
+)
+from .market_aware_session_history_final_receipt import (
+    MARKET_AWARE_SESSION_HISTORY_FINAL_RECEIPT_VERSION,
+    MarketAwareSessionHistoryFinalReceiptError,
+    build_market_aware_session_history_final_receipt,
+)
+from .market_aware_session_history_manifest import (
+    MARKET_AWARE_SESSION_HISTORY_MANIFEST_VERSION,
+    MarketAwareSessionHistoryManifestError,
+    build_market_aware_session_history_manifest,
+)
+from .market_aware_session_history_manifest_audit import (
+    MARKET_AWARE_SESSION_HISTORY_MANIFEST_AUDIT_VERSION,
+    MarketAwareSessionHistoryManifestAuditError,
+    audit_market_aware_session_history_manifest,
+)
+from .market_aware_session_history_manifest_render_audit import (
+    MARKET_AWARE_SESSION_HISTORY_MANIFEST_RENDER_AUDIT_VERSION,
+    MarketAwareSessionHistoryManifestRenderAuditError,
+    audit_market_aware_session_history_manifest_render,
+)
+from .market_aware_session_history_manifest_renderer import (
+    MARKET_AWARE_SESSION_HISTORY_MANIFEST_RENDER_VERSION,
+    MarketAwareSessionHistoryManifestRenderError,
+    render_market_aware_session_history_manifest,
+)
+from .market_aware_session_history_render_audit import (
+    MARKET_AWARE_SESSION_HISTORY_RENDER_AUDIT_VERSION,
+    MarketAwareSessionHistoryRenderAuditError,
+    audit_market_aware_session_history_render,
+)
+from .market_aware_session_history_renderer import (
+    MARKET_AWARE_SESSION_HISTORY_RENDER_VERSION,
+    MarketAwareSessionHistoryRenderError,
+    render_market_aware_session_history,
+)
+from .market_aware_session_package import (
+    MARKET_AWARE_SESSION_PACKAGE_VERSION,
+    MarketAwareSessionPackageError,
+    build_market_aware_session_package,
+)
+from .market_aware_session_package_audit import (
+    MARKET_AWARE_SESSION_PACKAGE_AUDIT_VERSION,
+    MarketAwareSessionPackageAuditError,
+    audit_market_aware_session_package,
+)
+from .market_aware_session_package_diff import (
+    MARKET_AWARE_SESSION_PACKAGE_DIFF_VERSION,
+    MarketAwareSessionPackageDiffError,
+    compare_market_aware_session_packages,
+)
+from .market_aware_session_package_diff_render_audit import (
+    MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_AUDIT_VERSION,
+    MarketAwareSessionPackageDiffRenderAuditError,
+    audit_market_aware_session_package_diff_render,
+)
+from .market_aware_session_package_diff_renderer import (
+    MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_VERSION,
+    MarketAwareSessionPackageDiffRenderError,
+    render_market_aware_session_package_diff,
+)
+from .market_aware_session_renderer import (
+    MARKET_AWARE_SESSION_RENDER_VERSION,
+    MarketAwareSessionRenderError,
+    render_market_aware_session,
+)
+from .market_aware_smoke import (
+    MARKET_AWARE_SMOKE_VERSION,
+    smoke_market_aware_analysis,
+)
+from .offline_provider import AnalysisProvider, OfflineAnalysisProvider, ProviderError
+from .quality import ANALYSIS_QUALITY_VERSION, AnalysisQualityError, audit_analysis_quality
+from .real_provider import OpenAIAnalysisProvider, ProviderTransportError, UrllibResponseTransport
+from .release_diff import (
+    RESEARCH_RELEASE_DIFF_VERSION,
+    ResearchReleaseDiffError,
+    compare_research_releases,
+)
+from .renderer import AnalysisRenderError, render_analysis
+from .request_builder import (
+    RequestBuildError,
+    build_analysis_context,
+    build_deepseek_request,
+    build_openai_request,
+    provider_output_schema,
+)
+from .research_freshness import (
+    RESEARCH_FRESHNESS_VERSION,
+    ResearchFreshnessError,
+    audit_research_freshness,
+)
+from .research_release import (
+    RESEARCH_RELEASE_VERSION,
+    ResearchReleaseError,
+    build_research_release,
+)
+from .review import ANALYSIS_REVIEW_VERSION, AnalysisReviewError, build_analysis_review
+from .review_record import (
+    ANALYSIS_REVIEW_RECORD_VERSION,
+    AnalysisReviewRecordError,
+    apply_analysis_review,
+)
+from .safety import ANALYSIS_SAFETY_VERSION, AnalysisSafetyError, audit_analysis_safety
+from .technical_features import (
+    INDICATOR_VERSION,
+    TechnicalFeatureReport,
+    TechnicalFeatureSnapshot,
+    build_feature_report,
+    compute_feature_snapshots,
+    serialize_feature_snapshots,
+)
+from .validator import AnalysisReportSource, AnalysisValidationError
+
+__all__ = [
+    "ANALYSIS_REPORT_SCHEMA_VERSION",
+    "ANALYSIS_REPORT_VERSION",
+    "ANALYSIS_SECTIONS",
+    "ALLOWED_CLAIM_KINDS",
+    "AnalysisProvider",
+    "AnalysisClaim",
+    "AnalysisReportConfig",
+    "AnalysisReportSource",
+    "AnalysisRenderError",
+    "AnalysisQualityError",
+    "ANALYSIS_QUALITY_VERSION",
+    "AnalysisSafetyError",
+    "ANALYSIS_SAFETY_VERSION",
+    "AnalysisReviewError",
+    "ANALYSIS_REVIEW_VERSION",
+    "AnalysisValidationError",
+    "DeepSeekAnalysisProvider",
+    "DeepSeekTransportError",
+    "INDICATOR_VERSION",
+    "OfflineAnalysisProvider",
+    "OpenAIAnalysisProvider",
+    "ProviderError",
+    "ProviderTransportError",
+    "RequestBuildError",
+    "UrllibResponseTransport",
+    "UrllibDeepSeekTransport",
+    "EVIDENCE_IDS",
+    "TechnicalFeatureReport",
+    "TechnicalFeatureSnapshot",
+    "build_feature_report",
+    "compute_feature_snapshots",
+    "serialize_feature_snapshots",
+    "build_analysis_context",
+    "build_openai_request",
+    "build_deepseek_request",
+    "provider_output_schema",
+    "render_analysis",
+    "audit_analysis_quality",
+    "MARKET_AWARE_REPLAY_VERSION",
+    "MarketAwareReplayError",
+    "replay_market_aware_analysis",
+    "MARKET_AWARE_RELEASE_REPLAY_VERSION",
+    "MarketAwareReleaseReplayError",
+    "replay_market_aware_release",
+    "MARKET_AWARE_SESSION_VERSION",
+    "MarketAwareSessionError",
+    "build_market_aware_session",
+    "MARKET_AWARE_SESSION_RENDER_VERSION",
+    "MarketAwareSessionRenderError",
+    "render_market_aware_session",
+    "MARKET_AWARE_SESSION_PACKAGE_VERSION",
+    "MarketAwareSessionPackageError",
+    "build_market_aware_session_package",
+    "MARKET_AWARE_SESSION_PACKAGE_AUDIT_VERSION",
+    "MarketAwareSessionPackageAuditError",
+    "audit_market_aware_session_package",
+    "MARKET_AWARE_SESSION_PACKAGE_DIFF_VERSION",
+    "MarketAwareSessionPackageDiffError",
+    "compare_market_aware_session_packages",
+    "MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_VERSION",
+    "MarketAwareSessionPackageDiffRenderError",
+    "render_market_aware_session_package_diff",
+    "MARKET_AWARE_SESSION_PACKAGE_DIFF_RENDER_AUDIT_VERSION",
+    "MarketAwareSessionPackageDiffRenderAuditError",
+    "audit_market_aware_session_package_diff_render",
+    "MARKET_AWARE_SESSION_HISTORY_VERSION",
+    "MarketAwareSessionHistoryError",
+    "build_market_aware_session_history",
+    "MARKET_AWARE_SESSION_HISTORY_AUDIT_VERSION",
+    "MarketAwareSessionHistoryAuditError",
+    "audit_market_aware_session_history",
+    "MARKET_AWARE_SESSION_HISTORY_RENDER_VERSION",
+    "MarketAwareSessionHistoryRenderError",
+    "render_market_aware_session_history",
+    "MARKET_AWARE_SESSION_HISTORY_RENDER_AUDIT_VERSION",
+    "MarketAwareSessionHistoryRenderAuditError",
+    "audit_market_aware_session_history_render",
+    "MARKET_AWARE_SESSION_HISTORY_MANIFEST_VERSION",
+    "MarketAwareSessionHistoryManifestError",
+    "build_market_aware_session_history_manifest",
+    "MARKET_AWARE_SESSION_HISTORY_MANIFEST_AUDIT_VERSION",
+    "MarketAwareSessionHistoryManifestAuditError",
+    "audit_market_aware_session_history_manifest",
+    "MARKET_AWARE_SESSION_HISTORY_MANIFEST_RENDER_VERSION",
+    "MarketAwareSessionHistoryManifestRenderError",
+    "render_market_aware_session_history_manifest",
+    "MARKET_AWARE_SESSION_HISTORY_MANIFEST_RENDER_AUDIT_VERSION",
+    "MarketAwareSessionHistoryManifestRenderAuditError",
+    "audit_market_aware_session_history_manifest_render",
+    "MARKET_AWARE_SESSION_HISTORY_CLOSURE_VERSION",
+    "MarketAwareSessionHistoryClosureError",
+    "build_market_aware_session_history_closure",
+    "MARKET_AWARE_SESSION_HISTORY_CLOSURE_RENDER_VERSION",
+    "MarketAwareSessionHistoryClosureRenderError",
+    "render_market_aware_session_history_closure",
+    "MARKET_AWARE_SESSION_HISTORY_CLOSURE_RENDER_AUDIT_VERSION",
+    "MarketAwareSessionHistoryClosureRenderAuditError",
+    "audit_market_aware_session_history_closure_render",
+    "MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_VERSION",
+    "MarketAwareSessionHistoryClosureAdmissionError",
+    "build_market_aware_session_history_closure_admission",
+    "MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_AUDIT_VERSION",
+    "MarketAwareSessionHistoryClosureAdmissionAuditError",
+    "audit_market_aware_session_history_closure_admission",
+    "MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_RENDER_VERSION",
+    "MarketAwareSessionHistoryClosureAdmissionRenderError",
+    "render_market_aware_session_history_closure_admission",
+    "MARKET_AWARE_SESSION_HISTORY_CLOSURE_ADMISSION_RENDER_AUDIT_VERSION",
+    "MarketAwareSessionHistoryClosureAdmissionRenderAuditError",
+    "audit_market_aware_session_history_closure_admission_render",
+    "MARKET_AWARE_SESSION_HISTORY_FINAL_RECEIPT_VERSION",
+    "MarketAwareSessionHistoryFinalReceiptError",
+    "build_market_aware_session_history_final_receipt",
+    "MARKET_AWARE_SMOKE_VERSION",
+    "smoke_market_aware_analysis",
+    "audit_analysis_safety",
+    "build_analysis_review",
+    "ANALYSIS_REVIEW_RECORD_VERSION",
+    "AnalysisReviewRecordError",
+    "apply_analysis_review",
+    "RESEARCH_RELEASE_VERSION",
+    "ResearchReleaseError",
+    "build_research_release",
+    "RESEARCH_FRESHNESS_VERSION",
+    "ResearchFreshnessError",
+    "audit_research_freshness",
+    "RESEARCH_RELEASE_DIFF_VERSION",
+    "ResearchReleaseDiffError",
+    "compare_research_releases",
+]
